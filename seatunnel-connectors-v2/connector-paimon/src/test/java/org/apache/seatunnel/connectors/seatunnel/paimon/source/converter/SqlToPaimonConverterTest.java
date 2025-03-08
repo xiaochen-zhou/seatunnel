@@ -201,6 +201,23 @@ public class SqlToPaimonConverterTest {
     }
 
     @Test
+    public void testConvertSqlWhereToPaimonPredicateWithBetween() {
+        String query = "SELECT * FROM table WHERE int_col between 3 and 6.6";
+
+        PlainSelect plainSelect = convertToPlainSelect(query);
+        Predicate predicate =
+                SqlToPaimonPredicateConverter.convertSqlWhereToPaimonPredicate(
+                        rowType, plainSelect);
+
+        assertNotNull(predicate);
+
+        PredicateBuilder builder = new PredicateBuilder(rowType);
+        Predicate expectedPredicate = PredicateBuilder.or(builder.between(7, 3, 6.6d));
+
+        assertEquals(expectedPredicate.toString(), predicate.toString());
+    }
+
+    @Test
     public void testConvertSqlSelectToPaimonProjectionArrayWithALL() {
         String query = "SELECT * FROM table WHERE int_col > 3 OR double_col < 6.6";
 

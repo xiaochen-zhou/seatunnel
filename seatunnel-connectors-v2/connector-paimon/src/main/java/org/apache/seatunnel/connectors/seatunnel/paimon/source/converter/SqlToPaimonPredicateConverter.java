@@ -41,6 +41,7 @@ import net.sf.jsqlparser.expression.TimeValue;
 import net.sf.jsqlparser.expression.TimestampValue;
 import net.sf.jsqlparser.expression.operators.conditional.AndExpression;
 import net.sf.jsqlparser.expression.operators.conditional.OrExpression;
+import net.sf.jsqlparser.expression.operators.relational.Between;
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThan;
 import net.sf.jsqlparser.expression.operators.relational.GreaterThanEquals;
@@ -224,6 +225,13 @@ public class SqlToPaimonPredicateConverter {
             Predicate rightPredicate =
                     parseExpressionToPredicate(builder, rowType, orExpression.getRightExpression());
             return PredicateBuilder.or(leftPredicate, rightPredicate);
+        } else if (expression instanceof Between) {
+            Between between = (Between) expression;
+            Object startVal = getJSQLParserDataTypeValue(between.getBetweenExpressionStart());
+            Object endVal = getJSQLParserDataTypeValue(between.getBetweenExpressionEnd());
+            Column column = (Column) between.getLeftExpression();
+            int columnIndex = getColumnIndex(builder, column);
+            return builder.between(columnIndex, startVal, endVal);
         } else if (expression instanceof Parenthesis) {
             Parenthesis parenthesis = (Parenthesis) expression;
             return parseExpressionToPredicate(builder, rowType, parenthesis.getExpression());
