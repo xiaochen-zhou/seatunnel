@@ -252,20 +252,20 @@ public class SqlToPaimonPredicateConverter {
             Object rightVal =
                     convertValueByPaimonDataType(rowType, column.getColumnName(), rightPredicate);
 
-            Pattern BEGIN_PATTERN = Pattern.compile("([^%]+)%");
+            Pattern BEGIN_PATTERN = Pattern.compile("([^%]+)%$");
             Matcher beginMatcher = BEGIN_PATTERN.matcher(rightVal.toString());
             if (beginMatcher.matches()) {
                 return builder.startsWith(
                         columnIndex, BinaryString.fromString(beginMatcher.group(1)));
             }
 
-            Pattern END_PATTERN = Pattern.compile("%([^%]+)");
-            Matcher endMatcher = END_PATTERN.matcher(rightVal.toString());
+						Pattern END_PATTERN = Pattern.compile("^%([^%]+)");
+						Matcher endMatcher = END_PATTERN.matcher(rightVal.toString());
             if (endMatcher.matches()) {
                 return builder.endsWith(columnIndex, BinaryString.fromString(endMatcher.group(1)));
             }
 
-            Pattern CONTAINS_PATTERN = Pattern.compile("%([^%]+)%");
+            Pattern CONTAINS_PATTERN = Pattern.compile("^%([^%]+)%$");
             Matcher containsMatcher = CONTAINS_PATTERN.matcher(rightVal.toString());
             if (containsMatcher.matches()) {
                 return builder.contains(
