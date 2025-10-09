@@ -190,6 +190,7 @@ public class DorisCatalogIT extends AbstractDorisIT {
         // when creating tables in Doris Catalog
         Assertions.assertDoesNotThrow(() -> catalog.createTable(tablePath, catalogTable, false));
         Assertions.assertDoesNotThrow(() -> catalog.createTable(tablePath, catalogTable, true));
+
         initCatalogWithSaveModeCreateTemplate();
         catalog.createTable(tablePath, catalogTable, false);
         Assertions.assertTrue(catalog.tableExists(tablePath));
