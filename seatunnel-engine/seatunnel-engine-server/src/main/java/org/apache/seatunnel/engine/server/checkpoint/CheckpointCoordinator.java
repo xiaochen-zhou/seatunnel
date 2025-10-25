@@ -134,6 +134,8 @@ public class CheckpointCoordinator {
 
     private final AtomicBoolean schemaChanging = new AtomicBoolean(false);
 
+    private final AtomicInteger consecutiveFailedCounter = new AtomicInteger(0);
+
     private final Object lock = new Object();
 
     /** Flag marking the coordinator as shut down (not accepting any messages anymore). */
@@ -287,6 +289,23 @@ public class CheckpointCoordinator {
         if (checkpointCoordinatorFuture.isDone()) {
             return;
         }
+        int failedCount = consecutiveFailedCounter.incrementAndGet();
+        int tolerableFailures = coordinatorConfig.getTolerableFailedCheckpoints();
+
+        if (tolerableFailures > 0 && failedCount <= tolerableFailures) {
+            LOG.warn(
+                    "Checkpoint failed (consecutive failures: {}/{}): {}",
+                    failedCount,
+                    tolerableFailures,
+                    ExceptionUtils.getMessage(checkpointException));
+            cleanPendingCheckpoint(reason);
+            return;
+        }
+
+        LOG.error(
+                "Checkpoint failures exceeded tolerable limit ({}/{}), failing the job",
+                failedCount,
+                tolerableFailures);
         updateStatus(CheckpointCoordinatorStatus.FAILED);
         checkpointCoordinatorFuture.complete(
                 new CheckpointCoordinatorState(
@@ -1125,5 +1144,16 @@ public class CheckpointCoordinator {
     @VisibleForTesting
     public Map<Long, SeaTunnelTaskState> getPipelineTaskStatus() {
         return pipelineTaskStatus;
+    }
+
+    /**
+     * Get the current number of consecutive failed checkpoints. This method is useful for
+     * monitoring and testing purposes.
+     *
+     * @return the current consecutive failed checkpoints count
+     */
+    @VisibleForTesting
+    public int getConsecutiveFailedCounter() {
+        return consecutiveFailedCounter.get();
     }
 }
