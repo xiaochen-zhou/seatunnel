@@ -104,6 +104,9 @@ public abstract class AbstractFlinkRuntimeEnvironment implements RuntimeEnvironm
         } else if (config.hasPath(EnvCommonOptions.CHECKPOINT_MIN_PAUSE.key())) {
             long minPause = config.getLong(EnvCommonOptions.CHECKPOINT_MIN_PAUSE.key());
             checkpointConfig.setMinPauseBetweenCheckpoints(minPause);
+        }else if (config.hasPath(EnvCommonOptions.TOLERABLE_FAILED_CHECKPOINTS.key())) {
+            int tolerableFailedCheckpointsNums = config.getInt(EnvCommonOptions.TOLERABLE_FAILED_CHECKPOINTS.key());
+            checkpointConfig.setTolerableCheckpointFailureNumber(tolerableFailedCheckpointsNums);
         }
 
         if (EnvironmentUtil.hasPathAndWaring(config, ConfigKeyName.CHECKPOINT_MODE)) {
