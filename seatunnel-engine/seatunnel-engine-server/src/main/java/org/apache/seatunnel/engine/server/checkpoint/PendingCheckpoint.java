@@ -169,8 +169,14 @@ public class PendingCheckpoint implements Checkpoint {
     }
 
     public void abortCheckpoint(CheckpointCloseReason closedReason, @Nullable Throwable cause) {
+        // For these reasons, complete normally (null) to avoid triggering error callback
+        // CHECKPOINT_EXPIRED: error already handled in handleCoordinatorError before calling
+        // cleanPendingCheckpoint
+        // CHECKPOINT_COORDINATOR_RESET: coordinator is resetting, not an error
+        // PIPELINE_END: pipeline is ending normally, not an error
         if (closedReason.equals(CheckpointCloseReason.CHECKPOINT_COORDINATOR_RESET)
-                || closedReason.equals(CheckpointCloseReason.PIPELINE_END)) {
+                || closedReason.equals(CheckpointCloseReason.PIPELINE_END)
+                || closedReason.equals(CheckpointCloseReason.CHECKPOINT_EXPIRED)) {
             completableFuture.complete(null);
         } else {
             this.failureCause = new CheckpointException(closedReason, cause);

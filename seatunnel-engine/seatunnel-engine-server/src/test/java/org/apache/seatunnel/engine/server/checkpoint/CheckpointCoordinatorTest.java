@@ -25,9 +25,9 @@ import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
 import org.apache.seatunnel.engine.core.checkpoint.CheckpointType;
 import org.apache.seatunnel.engine.server.AbstractSeaTunnelServerTest;
 import org.apache.seatunnel.engine.server.checkpoint.operation.TaskAcknowledgeOperation;
+import org.apache.seatunnel.engine.server.checkpoint.operation.TaskReportStatusOperation;
 import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.execution.TaskLocation;
-import org.apache.seatunnel.engine.server.master.JobMaster;
 import org.apache.seatunnel.engine.server.task.operation.TaskOperation;
 import org.apache.seatunnel.engine.server.task.statemachine.SeaTunnelTaskState;
 
@@ -55,6 +55,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.apache.seatunnel.engine.common.Constant.IMAP_RUNNING_JOB_STATE;
@@ -176,19 +177,123 @@ public class CheckpointCoordinatorTest
     }
 
     @Test
-    void testTolerableFailedCheckpoints() {
+    void testTolerableFailedCheckpoints() throws Exception {
         CheckpointConfig checkpointConfig = new CheckpointConfig();
         checkpointConfig.setStorage(new CheckpointStorageConfig());
-        checkpointConfig.setCheckpointInterval(10000);
-        checkpointConfig.setCheckpointMinPause(5000);
-        checkpointConfig.setCheckpointTimeout(30000);
+        checkpointConfig.setCheckpointTimeout(100);
         checkpointConfig.setTolerableFailedCheckpoints(3);
+        checkpointConfig.setCheckpointEnable(true);
 
+        Map<Integer, CheckpointPlan> planMap = new HashMap<>();
+        TaskLocation task1 = new TaskLocation(new TaskGroupLocation(1L, 1, 1), 1, 1);
+
+        Map<TaskLocation, Set<Tuple2<ActionStateKey, Integer>>> subtaskActions = new HashMap<>();
+        subtaskActions.put(
+                task1, Collections.singleton(Tuple2.tuple2(new ActionStateKey("action1"), 0)));
+
+        Map<ActionStateKey, Integer> pipelineActions = new HashMap<>();
+        pipelineActions.put(new ActionStateKey("action1"), 1);
+
+        planMap.put(
+                1,
+                CheckpointPlan.builder()
+                        .pipelineId(1)
+                        .pipelineSubtasks(Collections.singleton(task1))
+                        .startingSubtasks(Collections.singleton(task1))
+                        .subtaskActions(subtaskActions)
+                        .pipelineActions(pipelineActions)
+                        .build());
+
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            TestCheckpointManager checkpointManager =
+                    new TestCheckpointManager(
+                            1L,
+                            nodeEngine,
+                            planMap,
+                            checkpointConfig,
+                            server.getCheckpointService().getCheckpointStorage(),
+                            executorService,
+                            nodeEngine.getHazelcastInstance().getMap(IMAP_RUNNING_JOB_STATE));
+
+            CheckpointCoordinator coordinator = checkpointManager.getCheckpointCoordinator(1);
+            checkpointManager.reportedPipelineRunning(1, false);
+            coordinator.reportedTask(
+                    new TaskReportStatusOperation(task1, SeaTunnelTaskState.RUNNING));
+            ReflectionUtils.setField(coordinator, "isAllTaskReady", new AtomicBoolean(true));
+
+            CompletableFuture<PendingCheckpoint> pendingCheckpoint1 =
+                    coordinator.createPendingCheckpoint(
+                            System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
+            pendingCheckpoint1.join();
+            coordinator.startTriggerPendingCheckpoint(pendingCheckpoint1);
+            Thread.sleep(300);
+            int failedCount1 =
+                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            Assertions.assertEquals(
+                    1, failedCount1, "Failed counter should be 1 after first checkpoint timeout");
+            CompletableFuture<PendingCheckpoint> pendingCheckpoint2 =
+                    coordinator.createPendingCheckpoint(
+                            System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
+            pendingCheckpoint2.join();
+            coordinator.startTriggerPendingCheckpoint(pendingCheckpoint2);
+
+            // Wait for second checkpoint to timeout and fail
+            Thread.sleep(300);
+            int failedCount2 =
+                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            Assertions.assertEquals(
+                    2, failedCount2, "Failed counter should be 2 after second checkpoint timeout");
+            CompletableFuture<PendingCheckpoint> pendingCheckpoint3 =
+                    coordinator.createPendingCheckpoint(
+                            System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
+            coordinator.startTriggerPendingCheckpoint(pendingCheckpoint3);
+            Thread.sleep(50);
+            PendingCheckpoint checkpoint3 = pendingCheckpoint3.join();
+            CheckpointBarrier barrier3 =
+                    new CheckpointBarrier(
+                            checkpoint3.getCheckpointId(),
+                            System.currentTimeMillis(),
+                            CheckpointType.CHECKPOINT_TYPE);
+            checkpointManager.acknowledgeTask(
+                    new TaskAcknowledgeOperation(
+                            task1,
+                            barrier3,
+                            Collections.singletonList(
+                                    new ActionSubtaskState(
+                                            new ActionStateKey("action1"),
+                                            0,
+                                            Collections.emptyList()))));
+            Thread.sleep(100);
+
+            // Verify counter is reset to 0 after successful checkpoint
+            int failedCountAfterSuccess =
+                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            Assertions.assertEquals(
+                    0,
+                    failedCountAfterSuccess,
+                    "Failed counter should be reset to 0 after successful checkpoint");
+
+            // Trigger another checkpoint that will fail to verify counter starts from 0 again
+            CompletableFuture<PendingCheckpoint> pendingCheckpoint4 =
+                    coordinator.createPendingCheckpoint(
+                            System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
+            coordinator.startTriggerPendingCheckpoint(pendingCheckpoint4);
+            Thread.sleep(300);
+            int failedCountAfterReset =
+                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            Assertions.assertEquals(
+                    1,
+                    failedCountAfterReset,
+                    "Failed counter should be 1 after failure following a successful checkpoint");
+
+        } finally {
+            executorService.shutdownNow();
+        }
     }
+
     @Test
-    void testCheckpointMinPause() {
-
-    }
+    void testCheckpointMinPause() {}
 
     @Test
     void testFilteringClosedTasksAndActions() {
@@ -296,6 +401,13 @@ class TestCheckpointManager extends CheckpointManager {
     @Override
     protected InvocationFuture<?> sendOperationToMemberNode(TaskOperation operation) {
         this.operations.add(operation);
-        return null;
+        // Return a mock InvocationFuture that completes successfully
+        InvocationFuture<?> future = Mockito.mock(InvocationFuture.class);
+        try {
+            Mockito.when(future.get()).thenReturn(null);
+        } catch (Exception e) {
+            // ignore
+        }
+        return future;
     }
 }

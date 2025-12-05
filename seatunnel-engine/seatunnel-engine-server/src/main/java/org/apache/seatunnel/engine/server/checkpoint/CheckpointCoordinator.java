@@ -298,7 +298,7 @@ public class CheckpointCoordinator {
                     failedCount,
                     tolerableFailures,
                     ExceptionUtils.getMessage(checkpointException));
-            cleanPendingCheckpoint(reason);
+            cleanFailedCheckpoint(reason);
             return;
         }
 
@@ -649,7 +649,8 @@ public class CheckpointCoordinator {
         return new PassiveCompletableFuture<>(future);
     }
 
-    private void startTriggerPendingCheckpoint(
+    @VisibleForTesting
+    public void startTriggerPendingCheckpoint(
             CompletableFuture<PendingCheckpoint> pendingCompletableFuture) {
         pendingCompletableFuture.thenAccept(
                 pendingCheckpoint -> {
@@ -736,7 +737,8 @@ public class CheckpointCoordinator {
         pendingCounter.incrementAndGet();
     }
 
-    private CompletableFuture<PendingCheckpoint> createPendingCheckpoint(
+    @VisibleForTesting
+    public CompletableFuture<PendingCheckpoint> createPendingCheckpoint(
             long triggerTimestamp, CheckpointType checkpointType) {
         synchronized (lock) {
             CompletableFuture<Long> idFuture;
@@ -855,6 +857,25 @@ public class CheckpointCoordinator {
                 .toArray(InvocationFuture[]::new);
     }
 
+    /**
+     * Clean only the failed checkpoint(s) without shutting down the coordinator. This is used for
+     * tolerable checkpoint failures to allow subsequent checkpoints to continue.
+     */
+    protected void cleanFailedCheckpoint(CheckpointCloseReason closedReason) {
+        synchronized (lock) {
+            LOG.info("start clean failed checkpoint cause {}", closedReason.message());
+            if (!pendingCheckpoints.isEmpty()) {
+                pendingCheckpoints
+                        .values()
+                        .forEach(
+                                pendingCheckpoint ->
+                                        pendingCheckpoint.abortCheckpoint(closedReason, null));
+                pendingCheckpoints.clear();
+            }
+            pendingCounter.set(0);
+        }
+    }
+
     protected void cleanPendingCheckpoint(CheckpointCloseReason closedReason) {
         shutdown = true;
         isAllTaskReady.set(false);
@@ -929,6 +950,14 @@ public class CheckpointCoordinator {
                 completedCheckpoint.getCompletedTimestamp());
         final long checkpointId = completedCheckpoint.getCheckpointId();
         completedCheckpointIds.addLast(String.valueOf(completedCheckpoint.getCheckpointId()));
+
+        int previousFailedCount = consecutiveFailedCounter.getAndSet(0);
+        if (previousFailedCount > 0) {
+            LOG.info(
+                    "Reset consecutive failed counter from {} to 0 after checkpoint {} completed",
+                    previousFailedCount,
+                    completedCheckpoint.getCheckpointId());
+        }
         try {
             if (completedCheckpoint.getCheckpointType().notCompletedCheckpoint()) {
                 byte[] states = serializer.serialize(completedCheckpoint);
