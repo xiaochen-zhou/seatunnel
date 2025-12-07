@@ -228,8 +228,7 @@ public class CheckpointCoordinatorTest
             pendingCheckpoint1.join();
             coordinator.startTriggerPendingCheckpoint(pendingCheckpoint1);
             Thread.sleep(300);
-            int failedCount1 =
-                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            int failedCount1 = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     1, failedCount1, "Failed counter should be 1 after first checkpoint timeout");
             CompletableFuture<PendingCheckpoint> pendingCheckpoint2 =
@@ -240,8 +239,7 @@ public class CheckpointCoordinatorTest
 
             // Wait for second checkpoint to timeout and fail
             Thread.sleep(300);
-            int failedCount2 =
-                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            int failedCount2 = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     2, failedCount2, "Failed counter should be 2 after second checkpoint timeout");
             CompletableFuture<PendingCheckpoint> pendingCheckpoint3 =
@@ -267,8 +265,7 @@ public class CheckpointCoordinatorTest
             Thread.sleep(100);
 
             // Verify counter is reset to 0 after successful checkpoint
-            int failedCountAfterSuccess =
-                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            int failedCountAfterSuccess = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     0,
                     failedCountAfterSuccess,
@@ -280,8 +277,7 @@ public class CheckpointCoordinatorTest
                             System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
             coordinator.startTriggerPendingCheckpoint(pendingCheckpoint4);
             Thread.sleep(300);
-            int failedCountAfterReset =
-                    (int) ReflectionUtils.invoke(coordinator, "getConsecutiveFailedCounter");
+            int failedCountAfterReset = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     1,
                     failedCountAfterReset,

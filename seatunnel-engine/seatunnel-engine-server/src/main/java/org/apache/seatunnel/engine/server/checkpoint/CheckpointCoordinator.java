@@ -1175,13 +1175,6 @@ public class CheckpointCoordinator {
         return pipelineTaskStatus;
     }
 
-    /**
-     * Get the current number of consecutive failed checkpoints. This method is useful for
-     * monitoring and testing purposes.
-     *
-     * @return the current consecutive failed checkpoints count
-     */
-    @VisibleForTesting
     public int getConsecutiveFailedCounter() {
         return consecutiveFailedCounter.get();
     }
