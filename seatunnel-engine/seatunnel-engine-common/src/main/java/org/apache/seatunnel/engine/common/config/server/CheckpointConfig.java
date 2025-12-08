@@ -73,7 +73,7 @@ public class CheckpointConfig implements Serializable {
 
     public void setTolerableFailedCheckpoints(int tolerableFailedCheckpoints) {
         checkArgument(
-                tolerableFailedCheckpoints > 0,
+                tolerableFailedCheckpoints >= 0,
                 "The tolerable failed checkpoints must be non-negative.");
         this.tolerableFailedCheckpoints = tolerableFailedCheckpoints;
     }
