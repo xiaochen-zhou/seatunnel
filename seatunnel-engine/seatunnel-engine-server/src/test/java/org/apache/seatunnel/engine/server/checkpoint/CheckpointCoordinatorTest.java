@@ -262,7 +262,9 @@ public class CheckpointCoordinatorTest
                                             new ActionStateKey("action1"),
                                             0,
                                             Collections.emptyList()))));
-            Thread.sleep(100);
+
+            checkpoint3.getCompletableFuture().join();
+            Thread.sleep(200);
 
             // Verify counter is reset to 0 after successful checkpoint
             int failedCountAfterSuccess = coordinator.getConsecutiveFailedCounter();
