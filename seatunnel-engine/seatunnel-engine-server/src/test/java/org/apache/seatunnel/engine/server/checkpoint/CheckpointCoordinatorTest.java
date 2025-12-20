@@ -178,7 +178,12 @@ public class CheckpointCoordinatorTest
     @Test
     void testTolerableFailedCheckpoints() throws Exception {
         CheckpointConfig checkpointConfig = new CheckpointConfig();
-        checkpointConfig.setStorage(new CheckpointStorageConfig());
+        CheckpointStorageConfig storageConfig = new CheckpointStorageConfig();
+        Map<String, String> pluginConfig = new HashMap<>();
+        pluginConfig.put("storage.type", "hdfs");
+        pluginConfig.put("fs.defaultFS", "file:///");
+        storageConfig.setStoragePluginConfig(pluginConfig);
+        checkpointConfig.setStorage(storageConfig);
         checkpointConfig.setCheckpointTimeout(500);
         checkpointConfig.setTolerableFailedCheckpoints(3);
         checkpointConfig.setCheckpointEnable(true);
