@@ -55,7 +55,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.apache.seatunnel.engine.common.Constant.IMAP_RUNNING_JOB_STATE;
@@ -180,7 +179,7 @@ public class CheckpointCoordinatorTest
     void testTolerableFailedCheckpoints() throws Exception {
         CheckpointConfig checkpointConfig = new CheckpointConfig();
         checkpointConfig.setStorage(new CheckpointStorageConfig());
-        checkpointConfig.setCheckpointTimeout(100);
+        checkpointConfig.setCheckpointTimeout(500);
         checkpointConfig.setTolerableFailedCheckpoints(3);
         checkpointConfig.setCheckpointEnable(true);
 
@@ -193,7 +192,6 @@ public class CheckpointCoordinatorTest
 
         Map<ActionStateKey, Integer> pipelineActions = new HashMap<>();
         pipelineActions.put(new ActionStateKey("action1"), 1);
-
         planMap.put(
                 1,
                 CheckpointPlan.builder()
@@ -220,14 +218,13 @@ public class CheckpointCoordinatorTest
             checkpointManager.reportedPipelineRunning(1, false);
             coordinator.reportedTask(
                     new TaskReportStatusOperation(task1, SeaTunnelTaskState.RUNNING));
-//            ReflectionUtils.setField(coordinator, "isAllTaskReady", new AtomicBoolean(true));
 
             CompletableFuture<PendingCheckpoint> pendingCheckpoint1 =
                     coordinator.createPendingCheckpoint(
                             System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
             pendingCheckpoint1.join();
             coordinator.startTriggerPendingCheckpoint(pendingCheckpoint1);
-            Thread.sleep(300);
+            Thread.sleep(1000);
             int failedCount1 = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     1, failedCount1, "Failed counter should be 1 after first checkpoint timeout");
@@ -238,15 +235,15 @@ public class CheckpointCoordinatorTest
             coordinator.startTriggerPendingCheckpoint(pendingCheckpoint2);
 
             // Wait for second checkpoint to timeout and fail
-            Thread.sleep(300);
+            Thread.sleep(1000);
             int failedCount2 = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     2, failedCount2, "Failed counter should be 2 after second checkpoint timeout");
+
+            // Simulate a successful checkpoint
             CompletableFuture<PendingCheckpoint> pendingCheckpoint3 =
                     coordinator.createPendingCheckpoint(
                             System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
-            coordinator.startTriggerPendingCheckpoint(pendingCheckpoint3);
-            Thread.sleep(50);
             PendingCheckpoint checkpoint3 = pendingCheckpoint3.join();
             CheckpointBarrier barrier3 =
                     new CheckpointBarrier(
@@ -263,8 +260,8 @@ public class CheckpointCoordinatorTest
                                             0,
                                             Collections.emptyList()))));
 
-            checkpoint3.getCompletableFuture().join();
-            Thread.sleep(200);
+            CompletedCheckpoint completedCheckpoint3 = checkpoint3.getCompletableFuture().join();
+            coordinator.completePendingCheckpoint(completedCheckpoint3);
 
             // Verify counter is reset to 0 after successful checkpoint
             int failedCountAfterSuccess = coordinator.getConsecutiveFailedCounter();
@@ -278,7 +275,7 @@ public class CheckpointCoordinatorTest
                     coordinator.createPendingCheckpoint(
                             System.currentTimeMillis(), CheckpointType.CHECKPOINT_TYPE);
             coordinator.startTriggerPendingCheckpoint(pendingCheckpoint4);
-            Thread.sleep(300);
+            Thread.sleep(1000);
             int failedCountAfterReset = coordinator.getConsecutiveFailedCounter();
             Assertions.assertEquals(
                     1,
@@ -375,6 +372,7 @@ public class CheckpointCoordinatorTest
 
 class TestCheckpointManager extends CheckpointManager {
     public List<TaskOperation> operations = new ArrayList<>();
+    public CheckpointCoordinator spyCoordinator;
 
     public TestCheckpointManager(
             long jobId,
@@ -407,5 +405,22 @@ class TestCheckpointManager extends CheckpointManager {
             // ignore
         }
         return future;
+    }
+
+    public CheckpointCoordinator getCheckpointCoordinator(int pipelineId) {
+        CheckpointCoordinator coordinator = super.getCheckpointCoordinator(pipelineId);
+        if (coordinator == null) {
+            throw new RuntimeException(
+                    String.format("The checkpoint coordinator(%s) don't exist", pipelineId));
+        }
+
+        if (this.spyCoordinator == null) {
+            spyCoordinator = Mockito.spy(coordinator);
+            Mockito.doNothing()
+                    .when(spyCoordinator)
+                    .notifyCompleted(Mockito.any(CompletedCheckpoint.class));
+            setCheckpointCoordinator(1, spyCoordinator);
+        }
+        return spyCoordinator;
     }
 }

@@ -950,14 +950,6 @@ public class CheckpointCoordinator {
                 completedCheckpoint.getCompletedTimestamp());
         final long checkpointId = completedCheckpoint.getCheckpointId();
         completedCheckpointIds.addLast(String.valueOf(completedCheckpoint.getCheckpointId()));
-
-        int previousFailedCount = consecutiveFailedCounter.getAndSet(0);
-        if (previousFailedCount > 0) {
-            LOG.info(
-                    "Reset consecutive failed counter from {} to 0 after checkpoint {} completed",
-                    previousFailedCount,
-                    completedCheckpoint.getCheckpointId());
-        }
         try {
             if (completedCheckpoint.getCheckpointType().notCompletedCheckpoint()) {
                 byte[] states = serializer.serialize(completedCheckpoint);
@@ -999,6 +991,14 @@ public class CheckpointCoordinator {
         notifyCompleted(completedCheckpoint);
         pendingCheckpoints.remove(checkpointId).abortCheckpointTimeoutFutureWhenIsCompleted();
         pendingCounter.decrementAndGet();
+
+        int lastestFailedCount = consecutiveFailedCounter.getAndSet(0);
+        if (lastestFailedCount > 0) {
+            LOG.info(
+                    "Reset consecutive failed counter from {} to 0 after checkpoint {} completed",
+                    lastestFailedCount,
+                    completedCheckpoint.getCheckpointId());
+        }
 
         if (isCompleted()) {
             cleanPendingCheckpoint(CheckpointCloseReason.CHECKPOINT_COORDINATOR_COMPLETED);

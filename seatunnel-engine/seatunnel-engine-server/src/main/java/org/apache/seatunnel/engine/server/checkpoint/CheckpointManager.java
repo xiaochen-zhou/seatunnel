@@ -48,6 +48,7 @@ import com.hazelcast.map.IMap;
 import com.hazelcast.spi.impl.NodeEngine;
 import com.hazelcast.spi.impl.operationservice.impl.InvocationFuture;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.seatunnel.shade.com.google.common.annotations.VisibleForTesting;
 
 import java.util.Arrays;
 import java.util.Map;
@@ -181,6 +182,11 @@ public class CheckpointManager {
                     String.format("The checkpoint coordinator(%s) don't exist", pipelineId));
         }
         return coordinator;
+    }
+
+    @VisibleForTesting
+    protected void setCheckpointCoordinator(int pipelineId, CheckpointCoordinator coordinator) {
+        coordinatorMap.put(pipelineId, coordinator);
     }
 
     /**
