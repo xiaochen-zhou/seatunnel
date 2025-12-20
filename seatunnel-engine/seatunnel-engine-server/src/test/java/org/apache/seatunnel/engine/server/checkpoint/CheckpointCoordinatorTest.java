@@ -18,7 +18,9 @@
 package org.apache.seatunnel.engine.server.checkpoint;
 
 import org.apache.seatunnel.common.utils.ReflectionUtils;
+import org.apache.seatunnel.engine.checkpoint.storage.PipelineState;
 import org.apache.seatunnel.engine.checkpoint.storage.api.CheckpointStorage;
+import org.apache.seatunnel.engine.checkpoint.storage.exception.CheckpointStorageException;
 import org.apache.seatunnel.engine.common.config.server.CheckpointConfig;
 import org.apache.seatunnel.engine.common.config.server.CheckpointStorageConfig;
 import org.apache.seatunnel.engine.common.utils.concurrent.CompletableFuture;
@@ -40,6 +42,7 @@ import com.hazelcast.jet.datamodel.Tuple2;
 import com.hazelcast.map.IMap;
 import com.hazelcast.spi.impl.NodeEngine;
 import com.hazelcast.spi.impl.operationservice.impl.InvocationFuture;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -375,6 +378,7 @@ public class CheckpointCoordinatorTest
     }
 }
 
+@Slf4j
 class TestCheckpointManager extends CheckpointManager {
     public List<TaskOperation> operations = new ArrayList<>();
     public CheckpointCoordinator spyCoordinator;
@@ -424,6 +428,67 @@ class TestCheckpointManager extends CheckpointManager {
             Mockito.doNothing()
                     .when(spyCoordinator)
                     .notifyCompleted(Mockito.any(CompletedCheckpoint.class));
+
+            CheckpointStorage testCheckpointStorage =
+                    new CheckpointStorage() {
+                        @Override
+                        public String storeCheckPoint(PipelineState pipelineState)
+                                throws CheckpointStorageException {
+                            log.info("store checkpoint {}", pipelineState);
+                            return "";
+                        }
+
+                        @Override
+                        public void asyncStoreCheckPoint(PipelineState pipelineState)
+                                throws CheckpointStorageException {
+                            log.info("async store checkpoint {}", pipelineState);
+                        }
+
+                        @Override
+                        public List<PipelineState> getAllCheckpoints(String s)
+                                throws CheckpointStorageException {
+                            log.info("getAllCheckpoints {}", s);
+                            return Collections.emptyList();
+                        }
+
+                        @Override
+                        public List<PipelineState> getLatestCheckpoint(String s)
+                                throws CheckpointStorageException {
+                            log.info("getLatestCheckpoint {}", s);
+                            return Collections.emptyList();
+                        }
+
+                        @Override
+                        public PipelineState getLatestCheckpointByJobIdAndPipelineId(
+                                String s, String s1) throws CheckpointStorageException {
+                            log.info("getLatestCheckpoint {}", s);
+                            return null;
+                        }
+
+                        @Override
+                        public List<PipelineState> getCheckpointsByJobIdAndPipelineId(
+                                String s, String s1) throws CheckpointStorageException {
+                            return Collections.emptyList();
+                        }
+
+                        @Override
+                        public void deleteCheckpoint(String s) {}
+
+                        @Override
+                        public PipelineState getCheckpoint(String s, String s1, String s2)
+                                throws CheckpointStorageException {
+                            return null;
+                        }
+
+                        @Override
+                        public void deleteCheckpoint(String s, String s1, String s2)
+                                throws CheckpointStorageException {}
+
+                        @Override
+                        public void deleteCheckpoint(String s, String s1, List<String> list)
+                                throws CheckpointStorageException {}
+                    };
+            spyCoordinator.setCheckpointStorage(testCheckpointStorage);
             setCheckpointCoordinator(1, spyCoordinator);
         }
         return spyCoordinator;

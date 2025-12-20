@@ -98,7 +98,7 @@ public class CheckpointCoordinator {
 
     private final CheckpointManager checkpointManager;
 
-    private final CheckpointStorage checkpointStorage;
+    private CheckpointStorage checkpointStorage;
 
     @Getter private final CheckpointIDCounter checkpointIdCounter;
 
@@ -1177,5 +1177,10 @@ public class CheckpointCoordinator {
 
     public int getConsecutiveFailedCounter() {
         return consecutiveFailedCounter.get();
+    }
+
+    @VisibleForTesting
+    public void setCheckpointStorage(CheckpointStorage checkpointStorage) {
+        this.checkpointStorage = checkpointStorage;
     }
 }
