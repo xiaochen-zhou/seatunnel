@@ -220,7 +220,7 @@ public class CheckpointCoordinatorTest
             checkpointManager.reportedPipelineRunning(1, false);
             coordinator.reportedTask(
                     new TaskReportStatusOperation(task1, SeaTunnelTaskState.RUNNING));
-            ReflectionUtils.setField(coordinator, "isAllTaskReady", new AtomicBoolean(true));
+//            ReflectionUtils.setField(coordinator, "isAllTaskReady", new AtomicBoolean(true));
 
             CompletableFuture<PendingCheckpoint> pendingCheckpoint1 =
                     coordinator.createPendingCheckpoint(
