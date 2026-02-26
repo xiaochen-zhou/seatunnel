@@ -140,6 +140,24 @@ source {
     }
 }
 ```
+kyuubi
+
+```
+source {
+    Jdbc {
+        url = "jdbc:hive2://zookeeper-zkstage.zk.svc.datacloud.17usoft.com:16701/default;serviceDiscoveryMode=zooKeeper;zooKeeperNamespace=kyuubi_bdk_stage;hive.server2.proxy.user=dcadmin?kyuubi.engine.share.level=USER;spark.yarn.queue=root.super;spark.enable.DDLAndDML=true;kyuubi.engine.pool.size=3;kyuubi.engine.pool.name=jarvis_data_transfer;spark.app.name=kyuubi_jarvis_data_transfer_server"
+        driver = "org.apache.kyuubi.jdbc.KyuubiHiveDriver"
+        connection_check_timeout_sec = 100
+        # Define query logic as required
+        query = "select * from type_bin"
+        # Parallel sharding reads fields
+        partition_column = "id"
+        # Number of fragments
+        partition_num = 10
+    }
+}
+```
+
 
 ### 并行度临界值
 

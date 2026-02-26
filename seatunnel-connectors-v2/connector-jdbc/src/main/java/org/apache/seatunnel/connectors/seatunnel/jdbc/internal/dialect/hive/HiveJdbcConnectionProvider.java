@@ -21,8 +21,6 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorErr
 import org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorException;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.connection.SimpleJdbcConnectionProvider;
 
-import org.apache.hadoop.conf.Configuration;
-
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,8 +28,6 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
 import java.util.Properties;
-
-import static org.apache.seatunnel.connectors.seatunnel.jdbc.exception.JdbcConnectorErrorCode.KERBEROS_AUTHENTICATION_FAILED;
 
 @Slf4j
 public class HiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider {
@@ -47,14 +43,10 @@ public class HiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider {
         }
         JdbcConnectionConfig jdbcConfig = super.getJdbcConfig();
         final Driver driver = getLoadedDriver();
+        log.info("HiveJdbcConnectionProvider driver: {}", driver);
         HiveConnectionProduceFunction hiveConnectionProduceFunction =
                 new HiveConnectionProduceFunction(driver, jdbcConfig);
-
-        if (jdbcConfig.isUseKerberos()) {
-            super.setConnection(getConnectionWithKerberos(hiveConnectionProduceFunction));
-        } else {
-            super.setConnection(hiveConnectionProduceFunction.produce());
-        }
+        super.setConnection(hiveConnectionProduceFunction.produce());
         if (super.getConnection() == null) {
             // Throw same exception as DriverManager.getConnection when no driver found to match
             // caller expectation.
@@ -63,22 +55,6 @@ public class HiveJdbcConnectionProvider extends SimpleJdbcConnectionProvider {
                     "No suitable driver found for " + super.getJdbcConfig().getUrl());
         }
         return super.getConnection();
-    }
-
-    private Connection getConnectionWithKerberos(
-            HiveConnectionProduceFunction hiveConnectionProduceFunction) {
-        try {
-            Configuration configuration = new Configuration();
-            configuration.set("hadoop.security.authentication", "kerberos");
-            return HadoopLoginFactory.loginWithKerberos(
-                    configuration,
-                    jdbcConfig.getKrb5Path(),
-                    jdbcConfig.getKerberosPrincipal(),
-                    jdbcConfig.getKerberosKeytabPath(),
-                    (conf, userGroupInformation) -> hiveConnectionProduceFunction.produce());
-        } catch (Exception ex) {
-            throw new JdbcConnectorException(KERBEROS_AUTHENTICATION_FAILED, ex);
-        }
     }
 
     public static class HiveConnectionProduceFunction {

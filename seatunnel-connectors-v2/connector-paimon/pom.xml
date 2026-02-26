@@ -31,7 +31,8 @@
 
     <properties>
         <paimon.version>1.1.1</paimon.version>
-        <hive.version>2.3.9</hive.version>
+        <!--        <hive.version>1.1.0-cdh5.16.2</hive.version>-->
+        <hive.version>2.3.0</hive.version>
         <connector.name>connector.paimon</connector.name>
     </properties>
 
@@ -73,7 +74,7 @@
             <artifactId>hive-exec</artifactId>
             <version>${hive.version}</version>
             <classifier>core</classifier>
-            <scope>provided</scope>
+            <!--            <scope>provided</scope>-->
             <exclusions>
                 <exclusion>
                     <groupId>org.apache.logging.log4j</groupId>

@@ -99,6 +99,16 @@ import static org.apache.seatunnel.api.common.metrics.MetricNames.SOURCE_RECEIVE
 import static org.apache.seatunnel.api.common.metrics.MetricNames.SOURCE_RECEIVED_BYTES_PER_SECONDS;
 import static org.apache.seatunnel.api.common.metrics.MetricNames.SOURCE_RECEIVED_COUNT;
 import static org.apache.seatunnel.api.common.metrics.MetricNames.SOURCE_RECEIVED_QPS;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.CREATE_TIME;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.ERROR_MSG;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.FINISH_TIME;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.JOB_DAG;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.JOB_ID;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.JOB_NAME;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.JOB_STATUS;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.METRICS;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.PLUGIN_JARS_URLS;
+import static org.apache.seatunnel.engine.server.rest.RestConstant.START_TIME;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.TABLE_SINK_COMMITTED_BYTES;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.TABLE_SINK_COMMITTED_BYTES_PER_SECONDS;
 import static org.apache.seatunnel.engine.server.rest.RestConstant.TABLE_SINK_COMMITTED_COUNT;
@@ -190,21 +200,21 @@ public abstract class BaseService {
                         new HashSet<>());
 
         jobInfoJson
-                .add(RestConstant.JOB_ID, String.valueOf(jobId))
-                .add(RestConstant.JOB_NAME, logicalDag.getJobConfig().getName())
-                .add(RestConstant.JOB_STATUS, jobStatus.toString())
+                .add(JOB_ID, String.valueOf(jobId))
+                .add(JOB_NAME, logicalDag.getJobConfig().getName())
+                .add(JOB_STATUS, jobStatus.toString())
                 .add(
                         RestConstant.ENV_OPTIONS,
                         JsonUtil.toJsonObject(logicalDag.getJobConfig().getEnvOptions()))
                 .add(
-                        RestConstant.CREATE_TIME,
+                        CREATE_TIME,
                         DateTimeUtils.toString(
                                 jobImmutableInformation.getCreateTime(),
                                 DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
-                .add(RestConstant.START_TIME, getJobStartTime(jobId))
-                .add(RestConstant.JOB_DAG, jobDAGInfo.toJsonObject())
+                .add(START_TIME, getJobStartTime(jobId))
+                .add(JOB_DAG, jobDAGInfo.toJsonObject())
                 .add(
-                        RestConstant.PLUGIN_JARS_URLS,
+                        PLUGIN_JARS_URLS,
                         (JsonValue)
                                 jobImmutableInformation.getPluginJarsUrls().stream()
                                         .map(
@@ -218,9 +228,7 @@ public abstract class BaseService {
                 .add(
                         RestConstant.IS_START_WITH_SAVE_POINT,
                         jobImmutableInformation.isStartWithSavePoint())
-                .add(
-                        RestConstant.METRICS,
-                        metricsToJsonObject(getJobMetrics(jobMetrics, jobDAGInfo)));
+                .add(METRICS, metricsToJsonObject(getJobMetrics(jobMetrics, jobDAGInfo)));
 
         return jobInfoJson;
     }
@@ -241,31 +249,44 @@ public abstract class BaseService {
 
     protected JsonObject getJobInfoJson(
             JobHistoryService.JobState jobState, String jobMetrics, JobDAGInfo jobDAGInfo) {
-        return new JsonObject()
-                .add(RestConstant.JOB_ID, String.valueOf(jobState.getJobId()))
-                .add(RestConstant.JOB_NAME, jobState.getJobName())
-                .add(RestConstant.JOB_STATUS, jobState.getJobStatus().toString())
-                .add(RestConstant.ERROR_MSG, jobState.getErrorMessage())
-                .add(
-                        RestConstant.CREATE_TIME,
-                        DateTimeUtils.toString(
-                                jobState.getSubmitTime(),
-                                DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
-                .add(
-                        RestConstant.START_TIME,
-                        DateTimeUtils.toString(
-                                jobState.getStartTime(),
-                                DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
-                .add(
-                        RestConstant.FINISH_TIME,
-                        DateTimeUtils.toString(
-                                jobState.getFinishTime(),
-                                DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
-                .add(RestConstant.JOB_DAG, jobDAGInfo.toJsonObject())
-                .add(RestConstant.PLUGIN_JARS_URLS, new JsonArray())
-                .add(
-                        RestConstant.METRICS,
-                        metricsToJsonObject(getJobMetrics(jobMetrics, jobDAGInfo)));
+        String jobId = String.valueOf(jobState.getJobId() == null ? -1 : jobState.getJobId());
+        try {
+            JsonObject jobInfoJson =
+                    new JsonObject()
+                            .add(JOB_ID, jobId)
+                            .add(JOB_NAME, jobState.getJobName())
+                            .add(JOB_STATUS, jobState.getJobStatus().toString())
+                            .add(ERROR_MSG, jobState.getErrorMessage())
+                            .add(
+                                    CREATE_TIME,
+                                    DateTimeUtils.toString(
+                                            jobState.getSubmitTime(),
+                                            DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
+                            .add(
+                                    START_TIME,
+                                    jobState.getStartTime() == null
+                                            ? ""
+                                            : DateTimeUtils.toString(
+                                                    jobState.getStartTime(),
+                                                    DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
+                            .add(
+                                    FINISH_TIME,
+                                    jobState.getFinishTime() == null
+                                            ? ""
+                                            : DateTimeUtils.toString(
+                                                    jobState.getFinishTime(),
+                                                    DateTimeUtils.Formatter.YYYY_MM_DD_HH_MM_SS))
+                            .add(JOB_DAG, jobDAGInfo.toJsonObject())
+                            .add(PLUGIN_JARS_URLS, new JsonArray())
+                            .add(
+                                    METRICS,
+                                    metricsToJsonObject(getJobMetrics(jobMetrics, jobDAGInfo)));
+            return jobInfoJson;
+
+        } catch (Exception e) {
+            log.warn("getJobInfoJson error: ", e);
+            return new JsonObject().add(JOB_ID, jobId);
+        }
     }
 
     private Map<String, Object> getJobMetrics(String jobMetrics, JobDAGInfo jobDAGInfo) {
@@ -792,10 +813,10 @@ public abstract class BaseService {
     protected void handleStopJob(
             Map<String, Object> map, SeaTunnelServer seaTunnelServer, Node node) {
         boolean isStopWithSavePoint = false;
-        if (map.get(RestConstant.JOB_ID) == null) {
+        if (map.get(JOB_ID) == null) {
             throw new IllegalArgumentException("jobId cannot be empty.");
         }
-        long jobId = Long.parseLong(map.get(RestConstant.JOB_ID).toString());
+        long jobId = Long.parseLong(map.get(JOB_ID).toString());
         if (map.get(RestConstant.IS_STOP_WITH_SAVE_POINT) != null) {
             isStopWithSavePoint =
                     Boolean.parseBoolean(map.get(RestConstant.IS_STOP_WITH_SAVE_POINT).toString());
@@ -839,13 +860,13 @@ public abstract class BaseService {
 
         JobConfig jobConfig = new JobConfig();
         jobConfig.setName(
-                StringUtils.isEmpty(requestParams.get(RestConstant.JOB_NAME))
+                StringUtils.isEmpty(requestParams.get(JOB_NAME))
                         ? jobName
-                        : requestParams.get(RestConstant.JOB_NAME));
+                        : requestParams.get(JOB_NAME));
 
         boolean startWithSavePoint =
                 Boolean.parseBoolean(requestParams.get(RestConstant.IS_START_WITH_SAVE_POINT));
-        String jobIdStr = requestParams.get(RestConstant.JOB_ID);
+        String jobIdStr = requestParams.get(JOB_ID);
         Long finalJobId = StringUtils.isNotBlank(jobIdStr) ? Long.parseLong(jobIdStr) : null;
         RestJobExecutionEnvironment restJobExecutionEnvironment =
                 new RestJobExecutionEnvironment(
@@ -867,8 +888,8 @@ public abstract class BaseService {
         }
 
         return new JsonObject()
-                .add(RestConstant.JOB_ID, String.valueOf(jobId))
-                .add(RestConstant.JOB_NAME, jobConfig.getName());
+                .add(JOB_ID, String.valueOf(jobId))
+                .add(JOB_NAME, jobConfig.getName());
     }
 
     private void submitJob(
