@@ -106,6 +106,8 @@ public class StarRocksSinkManager {
                     break;
                 }
                 if (i >= sinkConfig.getMaxRetries()) {
+                    log.error(
+                            "The number of retries was exceeded, writing records to StarRocks failed.");
                     throw new StarRocksConnectorException(
                             StarRocksConnectorErrorCode.WRITE_RECORDS_FAILED,
                             "The number of retries was exceeded, writing records to StarRocks failed.",

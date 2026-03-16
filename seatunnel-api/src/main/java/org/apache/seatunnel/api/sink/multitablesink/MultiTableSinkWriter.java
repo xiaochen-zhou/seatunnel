@@ -265,7 +265,10 @@ public class MultiTableSinkWriter
                                             SinkWriter<SeaTunnelRow, ?, ?> sinkWriter =
                                                     sinkWriterEntry.getValue();
                                             commit = sinkWriter.prepareCommit(checkpointId);
-                                        } catch (IOException e) {
+                                        } catch (Exception e) {
+                                            log.error(
+                                                    "MultiTableSinkWriter prepareCommit error: ",
+                                                    e);
                                             throw new RuntimeException(e);
                                         }
                                         commit.ifPresent(

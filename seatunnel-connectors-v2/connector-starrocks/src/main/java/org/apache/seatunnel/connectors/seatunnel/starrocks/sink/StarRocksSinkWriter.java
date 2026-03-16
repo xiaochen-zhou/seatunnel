@@ -107,6 +107,7 @@ public class StarRocksSinkWriter extends AbstractSinkWriter<SeaTunnelRow, Void>
     public Optional<Void> prepareCommit() {
         // Flush to storage before snapshot state is performed
         manager.flush();
+        log.info("Flush finish, prepare commit...");
         return super.prepareCommit();
     }
 
