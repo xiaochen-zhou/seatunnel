@@ -225,12 +225,15 @@ public abstract class AbstractWriteStrategy<T> implements WriteStrategy<T> {
         String fileNameExpression = fileSinkConfig.getFileNameExpression();
         FileFormat fileFormat = fileSinkConfig.getFileFormat();
         String suffix;
-        if (StringUtils.isNotEmpty(fileSinkConfig.getFilenameExtension())) {
+				String filenameExtension = fileSinkConfig.getFilenameExtension();
+				if (StringUtils.isNotEmpty(filenameExtension)) {
             suffix =
-                    fileSinkConfig.getFilenameExtension().startsWith(".")
-                            ? fileSinkConfig.getFilenameExtension()
-                            : "." + fileSinkConfig.getFilenameExtension();
-        } else {
+                    filenameExtension.startsWith(".")
+                            ? filenameExtension
+                            : "." + filenameExtension;
+        } else if ("tc".equalsIgnoreCase(fileNameExpression)) {
+						suffix = "";
+				} else {
             suffix = fileFormat.getSuffix();
             suffix = compressFormat.getCompressCodec() + suffix;
         }
