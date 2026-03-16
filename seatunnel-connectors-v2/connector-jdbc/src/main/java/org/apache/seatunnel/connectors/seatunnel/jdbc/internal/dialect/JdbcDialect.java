@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect;
 
+import org.apache.seatunnel.shade.org.apache.commons.lang3.StringUtils;
+
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.catalog.TableSchema;
 import org.apache.seatunnel.api.table.converter.BasicTypeDefine;
@@ -36,9 +38,16 @@ import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.converter.JdbcRow
 import org.apache.seatunnel.connectors.seatunnel.jdbc.internal.dialect.dialectenum.FieldIdeEnum;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.source.JdbcSourceTable;
 import org.apache.seatunnel.connectors.seatunnel.jdbc.utils.DefaultValueUtils;
-import org.apache.seatunnel.shade.org.apache.commons.lang3.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import net.sf.jsqlparser.JSQLParserException;
+import net.sf.jsqlparser.expression.LongValue;
+import net.sf.jsqlparser.parser.CCJSqlParserUtil;
+import net.sf.jsqlparser.statement.select.Limit;
+import net.sf.jsqlparser.statement.select.PlainSelect;
+import net.sf.jsqlparser.statement.select.Select;
 
 import java.io.Serializable;
 import java.sql.Connection;
@@ -273,36 +282,50 @@ public interface JdbcDialect extends Serializable {
         return statement;
     }
 
-		default ResultSetMetaData getResultSetMetaData(Connection conn, String query)
-			throws SQLException {
-				String metadataQuery = wrapQueryWithFalseCondition(query);
-				log.info("jdbc getResultSetMetaData metadataQuery: {}", metadataQuery);
-				PreparedStatement ps = conn.prepareStatement(metadataQuery);
-				return ps.getMetaData();
-		}
+    default ResultSetMetaData getResultSetMetaData(Connection conn, String query)
+            throws SQLException {
+        String metadataQuery = wrapQueryWithLimitOne(query);
+        log.info("jdbc getResultSetMetaData metadataQuery: {}", metadataQuery);
+        PreparedStatement ps = conn.prepareStatement(metadataQuery);
+        return ps.getMetaData();
+    }
 
-		/**
-		 * Wraps the given SQL query with a false WHERE condition (WHERE 1=0 or AND 1=0) so that the
-		 * query returns no rows but still provides ResultSetMetaData. This avoids full table scans
-		 * when only column type information is needed (e.g. during job submission).
-		 *
-		 * @param query the original SQL query
-		 * @return the wrapped SQL query that returns no rows
-		 */
-		default String wrapQueryWithFalseCondition(String query) {
-				// Remove trailing semicolon and whitespace
-				String trimmed = query.trim();
-				if (trimmed.endsWith(";")) {
-						trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
-				}
-				// Check if the query already contains a WHERE clause (case-insensitive).
-				// If yes, append AND 1=0; otherwise append WHERE 1=0.
-				if (trimmed.toLowerCase().matches("(?s).*\\bwhere\\b.*")) {
-						return trimmed + " AND 1=0";
-				} else {
-						return trimmed + " WHERE 1=0";
-				}
-		}
+    /**
+     * Wraps the given SQL query with a false WHERE condition (WHERE 1=0 or AND 1=0) so that the
+     * query returns no rows but still provides ResultSetMetaData. This avoids full table scans when
+     * only column type information is needed (e.g. during job submission).
+     *
+     * @param query the original SQL query
+     * @return the wrapped SQL query that returns no rows
+     */
+    default String wrapQueryWithLimitOne(String query) {
+        String trimmed = query.trim();
+        if (trimmed.endsWith(";")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1).trim();
+        }
+        net.sf.jsqlparser.statement.Statement stmt;
+        try {
+            stmt = CCJSqlParserUtil.parse(trimmed);
+        } catch (JSQLParserException e) {
+            log.warn("wrapQueryWithLimitOne error: ", e);
+            return query;
+        }
+        if (stmt instanceof Select) {
+            Select select = (Select) stmt;
+            if (select.getSelectBody() instanceof PlainSelect) {
+                PlainSelect ps = (PlainSelect) select.getSelectBody();
+                Limit limit = ps.getLimit();
+                if (limit == null) {
+                    limit = new Limit();
+                    limit.setRowCount(new LongValue(1));
+                    ps.setLimit(limit);
+                } else {
+                    limit.setRowCount(new LongValue(1));
+                }
+            }
+        }
+        return stmt.toString();
+    }
 
     default String extractTableName(TablePath tablePath) {
         return tablePath.getSchemaAndTableName();

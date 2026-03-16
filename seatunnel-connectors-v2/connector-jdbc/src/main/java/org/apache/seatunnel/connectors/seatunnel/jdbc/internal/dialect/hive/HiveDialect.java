@@ -57,7 +57,9 @@ public class HiveDialect implements JdbcDialect {
     @Override
     public ResultSetMetaData getResultSetMetaData(Connection conn, String query)
             throws SQLException {
-        try (PreparedStatement preparedStatement = conn.prepareStatement(query);
+        String metadataQuery = wrapQueryWithLimitOne(query);
+        log.info("hive jdbc getResultSetMetaData metadataQuery: {}", metadataQuery);
+        try (PreparedStatement preparedStatement = conn.prepareStatement(metadataQuery);
                 ResultSet resultSet = preparedStatement.executeQuery()) {
             return resultSet.getMetaData();
         }
