@@ -203,6 +203,7 @@ public class SinkFlowLifeCycle<T, CommitInfoT extends Serializable, AggregatedCo
                         lastCommitInfo = writer.prepareCommit(barrier.getId());
                     } catch (Exception e) {
                         writer.abortPrepare();
+                        log.error("sink received error: ", e);
                         throw e;
                     }
                     List<StateT> states = writer.snapshotState(barrier.getId());

@@ -39,7 +39,6 @@ import org.apache.commons.collections4.CollectionUtils;
 
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -96,21 +95,24 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
                 String tableId = ((SeaTunnelRow) row).getTableId();
                 // init the size of row early with rowType, this way is faster than init the size
                 // without rowType
-                int size;
-                if (rowType instanceof SeaTunnelRowType) {
-                    size = ((SeaTunnelRow) row).getBytesSize((SeaTunnelRowType) rowType);
-                } else if (rowType instanceof MultipleRowType) {
-                    size = ((SeaTunnelRow) row).getBytesSize(rowTypeMap.get(tableId));
-                } else {
-                    throw new SeaTunnelEngineException(
-                            "Unsupported row type: " + rowType.getClass().getName());
-                }
+                //                int size;
+                //                if (rowType instanceof SeaTunnelRowType) {
+                //                    size = ((SeaTunnelRow) row).getBytesSize((SeaTunnelRowType)
+                // rowType);
+                //                } else if (rowType instanceof MultipleRowType) {
+                //                    size = ((SeaTunnelRow)
+                // row).getBytesSize(rowTypeMap.get(tableId));
+                //                } else {
+                //                    throw new SeaTunnelEngineException(
+                //                            "Unsupported row type: " +
+                // rowType.getClass().getName());
+                //                }
                 flowControlGate.audit((SeaTunnelRow) row);
                 connectorMetricsCalcContext.updateMetrics(row, tableId);
             }
             sendRecordToNext(new Record<>(row));
             emptyThisPollNext = false;
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -130,7 +132,7 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
                         "Unsupported row type: " + rowType.getClass().getName());
             }
             sendRecordToNext(new Record<>(event));
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new RuntimeException(e);
         }
     }
@@ -188,7 +190,7 @@ public class SeaTunnelSourceCollector<T> implements Collector<T> {
         this.emptyThisPollNext = true;
     }
 
-    public void sendRecordToNext(Record<?> record) throws IOException {
+    public void sendRecordToNext(Record<?> record) throws Exception {
         synchronized (checkpointLock) {
             for (OneInputFlowLifeCycle<Record<?>> output : outputs) {
                 output.received(record);

@@ -284,7 +284,8 @@ public class MultiTableSinkWriter
             try {
                 future.get();
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                log.error("MultiTableSinkWriter future get error: ", e);
+                throw new IOException(e);
             }
         }
         if (multiTableCommitInfo.getCommitInfo().isEmpty()) {
