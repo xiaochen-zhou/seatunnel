@@ -138,6 +138,31 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
         return coordinatorServiceConfig;
     }
 
+    private ParallelismInferConfig parseParallelismInferConfig(Node parallelismInferenceNode) {
+        ParallelismInferConfig config = new ParallelismInferConfig();
+        for (Node node : childElements(parallelismInferenceNode)) {
+            String name = cleanNodeName(node);
+            if (ServerConfigOptions.MasterServerConfigOptions.PARALLELISM_INFER_ENABLED
+                    .key()
+                    .equals(name)) {
+                config.setEnabled(getBooleanValue(getTextContent(node)));
+            } else if (ServerConfigOptions.MasterServerConfigOptions
+                    .PARALLELISM_INFER_MAX_PARALLELISM
+                    .key()
+                    .equals(name)) {
+                config.setMaxParallelism(
+                        getIntegerValue(
+                                ServerConfigOptions.MasterServerConfigOptions
+                                        .PARALLELISM_INFER_MAX_PARALLELISM
+                                        .key(),
+                                getTextContent(node)));
+            } else {
+                LOGGER.warning("Unrecognized element: " + name);
+            }
+        }
+        return config;
+    }
+
     private void parseEngineConfig(Node engineNode, SeaTunnelConfig config) {
         final EngineConfig engineConfig = config.getEngineConfig();
         for (Node node : childElements(engineNode)) {
@@ -259,6 +284,10 @@ public class YamlSeaTunnelDomConfigProcessor extends AbstractDomConfigProcessor 
                     .key()
                     .equals(name)) {
                 engineConfig.setCoordinatorServiceConfig(parseCoordinatorServiceConfig(node));
+            } else if (ServerConfigOptions.MasterServerConfigOptions.PARALLELISM_INFER
+                    .key()
+                    .equals(name)) {
+                engineConfig.setParallelismInferConfig(parseParallelismInferConfig(node));
             } else {
                 LOGGER.warning("Unrecognized element: " + name);
             }

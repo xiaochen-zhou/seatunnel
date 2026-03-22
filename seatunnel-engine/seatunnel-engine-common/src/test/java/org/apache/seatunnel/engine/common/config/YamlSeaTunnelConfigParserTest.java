@@ -148,4 +148,20 @@ public class YamlSeaTunnelConfigParserTest {
         Assertions.assertEquals(
                 "123456", config.getEngineConfig().getHttpConfig().getKeyStorePassword());
     }
+
+    @Test
+    public void testParallelismInferConfig() throws IOException {
+        YamlSeaTunnelConfigLocator yamlConfigLocator = new YamlSeaTunnelConfigLocator();
+        ReflectionUtils.invoke(
+                yamlConfigLocator,
+                "loadDefaultConfigurationFromClasspath",
+                "seatunnel-parallelism-infer.yaml");
+        SeaTunnelConfig config =
+                new YamlSeaTunnelConfigBuilder(yamlConfigLocator).setProperties(null).build();
+        ParallelismInferConfig parallelismInferConfig =
+                config.getEngineConfig().getParallelismInferConfig();
+        Assertions.assertNotNull(parallelismInferConfig);
+        Assertions.assertTrue(parallelismInferConfig.isEnabled());
+        Assertions.assertEquals(256, parallelismInferConfig.getMaxParallelism());
+    }
 }

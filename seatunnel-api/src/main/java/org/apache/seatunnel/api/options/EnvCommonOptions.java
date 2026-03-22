@@ -135,4 +135,19 @@ public class EnvCommonOptions {
                     .noDefaultValue()
                     .withDescription(
                             "The http path of the metadata lake, for example: http://localhost:8090/api/metalakes/laowang_test/catalogs/");
+
+    // ==================== Parallelism Inference Options ====================
+
+    public static Option<Boolean> PARALLELISM_INFER_ENABLED =
+            Options.key("parallelism.infer.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription("Enable automatic parallelism inference.");
+
+    public static Option<Integer> PARALLELISM_INFER_MAX_PARALLELISM =
+            Options.key("parallelism.infer.max-parallelism")
+                    .intType()
+                    .defaultValue(64)
+                    .withDescription(
+                            "The maximum parallelism for operators when using automatic inference.");
 }
