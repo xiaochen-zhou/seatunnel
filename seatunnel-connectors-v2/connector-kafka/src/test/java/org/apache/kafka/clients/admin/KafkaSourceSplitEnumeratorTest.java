@@ -20,6 +20,7 @@ package org.apache.kafka.clients.admin;
 import org.apache.seatunnel.shade.com.google.common.collect.Lists;
 
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
+import org.apache.seatunnel.connectors.seatunnel.kafka.source.KafkaSource;
 import org.apache.seatunnel.connectors.seatunnel.kafka.source.KafkaSourceConfig;
 import org.apache.seatunnel.connectors.seatunnel.kafka.source.KafkaSourceSplit;
 import org.apache.seatunnel.connectors.seatunnel.kafka.source.KafkaSourceSplitEnumerator;
@@ -34,6 +35,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -97,6 +99,48 @@ class KafkaSourceSplitEnumeratorTest {
                                                                 partition0.topic(),
                                                                 false,
                                                                 mockTopicPartition)));
+                                    }
+                                }));
+
+        List<TopicPartitionInfo> topic1Partitions = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            topic1Partitions.add(
+                    new TopicPartitionInfo(
+                            i,
+                            new Node(1, "127.0.0.1", 9092),
+                            Collections.emptyList(),
+                            Collections.emptyList()));
+        }
+
+        List<TopicPartitionInfo> topic2Partitions = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            topic2Partitions.add(
+                    new TopicPartitionInfo(
+                            i,
+                            new Node(1, "127.0.0.1", 9092),
+                            Collections.emptyList(),
+                            Collections.emptyList()));
+        }
+
+        Mockito.when(adminClient.describeTopics(Mockito.any(java.util.Collection.class)))
+                .thenReturn(
+                        DescribeTopicsResult.ofTopicNames(
+                                new HashMap<String, KafkaFuture<TopicDescription>>() {
+                                    {
+                                        put(
+                                                "test-parallelism-infer-topic1",
+                                                KafkaFuture.completedFuture(
+                                                        new TopicDescription(
+                                                                "test-parallelism-infer-topic1",
+                                                                false,
+                                                                topic1Partitions)));
+                                        put(
+                                                "test-parallelism-infer-topic2",
+                                                KafkaFuture.completedFuture(
+                                                        new TopicDescription(
+                                                                "test-parallelism-infer-topic2",
+                                                                false,
+                                                                topic2Partitions)));
                                     }
                                 }));
     }
@@ -253,5 +297,17 @@ class KafkaSourceSplitEnumeratorTest {
         Assertions.assertEquals(2, pendingSplit.size());
         Assertions.assertNotNull(pendingSplit.get(partition0));
         Assertions.assertNotNull(pendingSplit.get(partition2));
+    }
+
+    @Test
+    void testParallelismInfer() throws ExecutionException, InterruptedException {
+
+        Map<String, Object> configMap = new HashMap<>();
+        configMap.put("bootstrap.servers", "localhost:9092");
+        configMap.put("topic", "test-parallelism-infer-topic1");
+        configMap.put("group.id", "test-group");
+
+        KafkaSource kafkaSource = new KafkaSource(ReadonlyConfig.fromMap(configMap));
+        int i = kafkaSource.inferParallelism();
     }
 }
