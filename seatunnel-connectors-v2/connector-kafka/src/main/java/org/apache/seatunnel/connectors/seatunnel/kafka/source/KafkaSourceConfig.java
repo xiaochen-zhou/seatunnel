@@ -59,6 +59,7 @@ import org.apache.seatunnel.format.protobuf.SchemaRegistryAwareProtobufDeseriali
 import org.apache.seatunnel.format.text.TextDeserializationSchema;
 import org.apache.seatunnel.format.text.constant.TextFormatConstant;
 
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -480,7 +481,12 @@ public class KafkaSourceConfig implements Serializable {
                 ConsumerConfig.CLIENT_ID_CONFIG,
                 "seatunnel-parallelism-infer-" + System.currentTimeMillis());
 
-        try (AdminClient adminClient = AdminClient.create(props)) {
+        return getTotalPartitionCount(AdminClient.create(props));
+    }
+
+    @VisibleForTesting
+    public int getTotalPartitionCount(AdminClient adminClient) {
+        try {
             Set<String> topics = new HashSet<>();
             for (ConsumerMetadata metadata : mapMetadata.values()) {
                 if (metadata.isPattern()) {

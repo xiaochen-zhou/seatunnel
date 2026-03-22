@@ -36,6 +36,8 @@ import org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaBaseOptions;
 import org.apache.seatunnel.connectors.seatunnel.kafka.source.fetch.KafkaSourceFetcherManager;
 import org.apache.seatunnel.connectors.seatunnel.kafka.state.KafkaSourceState;
 
+import org.apache.arrow.util.VisibleForTesting;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
@@ -134,5 +136,10 @@ public class KafkaSource
     @Override
     public int inferParallelism() {
         return kafkaSourceConfig.getTotalPartitionCount();
+    }
+
+    @VisibleForTesting
+    public Integer getInferParallelism(AdminClient adminClient) {
+        return kafkaSourceConfig.getTotalPartitionCount(adminClient);
     }
 }

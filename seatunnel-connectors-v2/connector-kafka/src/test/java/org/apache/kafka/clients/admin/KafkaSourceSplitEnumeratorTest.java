@@ -37,6 +37,7 @@ import org.mockito.Mockito;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -99,48 +100,6 @@ class KafkaSourceSplitEnumeratorTest {
                                                                 partition0.topic(),
                                                                 false,
                                                                 mockTopicPartition)));
-                                    }
-                                }));
-
-        List<TopicPartitionInfo> topic1Partitions = new ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            topic1Partitions.add(
-                    new TopicPartitionInfo(
-                            i,
-                            new Node(1, "127.0.0.1", 9092),
-                            Collections.emptyList(),
-                            Collections.emptyList()));
-        }
-
-        List<TopicPartitionInfo> topic2Partitions = new ArrayList<>();
-        for (int i = 0; i < 4; i++) {
-            topic2Partitions.add(
-                    new TopicPartitionInfo(
-                            i,
-                            new Node(1, "127.0.0.1", 9092),
-                            Collections.emptyList(),
-                            Collections.emptyList()));
-        }
-
-        Mockito.when(adminClient.describeTopics(Mockito.any(java.util.Collection.class)))
-                .thenReturn(
-                        DescribeTopicsResult.ofTopicNames(
-                                new HashMap<String, KafkaFuture<TopicDescription>>() {
-                                    {
-                                        put(
-                                                "test-parallelism-infer-topic1",
-                                                KafkaFuture.completedFuture(
-                                                        new TopicDescription(
-                                                                "test-parallelism-infer-topic1",
-                                                                false,
-                                                                topic1Partitions)));
-                                        put(
-                                                "test-parallelism-infer-topic2",
-                                                KafkaFuture.completedFuture(
-                                                        new TopicDescription(
-                                                                "test-parallelism-infer-topic2",
-                                                                false,
-                                                                topic2Partitions)));
                                     }
                                 }));
     }
@@ -300,14 +259,67 @@ class KafkaSourceSplitEnumeratorTest {
     }
 
     @Test
-    void testParallelismInfer() throws ExecutionException, InterruptedException {
+    void testParallelismInfer() throws Exception {
 
         Map<String, Object> configMap = new HashMap<>();
         configMap.put("bootstrap.servers", "localhost:9092");
         configMap.put("topic", "test-parallelism-infer-topic1");
         configMap.put("group.id", "test-group");
 
+        List<TopicPartitionInfo> topic1Partitions = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            topic1Partitions.add(
+                    new TopicPartitionInfo(
+                            i,
+                            new Node(1, "127.0.0.1", 9092),
+                            Collections.emptyList(),
+                            Collections.emptyList()));
+        }
+
+        List<TopicPartitionInfo> topic2Partitions = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            topic2Partitions.add(
+                    new TopicPartitionInfo(
+                            i,
+                            new Node(1, "127.0.0.1", 9092),
+                            Collections.emptyList(),
+                            Collections.emptyList()));
+        }
+
+        Map<String, List<TopicPartitionInfo>> topicPartitionsMap = new HashMap<>();
+        topicPartitionsMap.put("test-parallelism-infer-topic1", topic1Partitions);
+        topicPartitionsMap.put("test-parallelism-infer-topic2", topic2Partitions);
+        setupDescribeTopicsMock(topicPartitionsMap);
+
         KafkaSource kafkaSource = new KafkaSource(ReadonlyConfig.fromMap(configMap));
-        int i = kafkaSource.inferParallelism();
+        Assertions.assertEquals(3, kafkaSource.getInferParallelism(adminClient));
+
+        configMap.put("topic", "test-parallelism-infer-topic2");
+        kafkaSource = new KafkaSource(ReadonlyConfig.fromMap(configMap));
+        Assertions.assertEquals(4, kafkaSource.getInferParallelism(adminClient));
+
+        configMap.put("topic", "test-parallelism-infer-topic1,test-parallelism-infer-topic2");
+        kafkaSource = new KafkaSource(ReadonlyConfig.fromMap(configMap));
+        Assertions.assertEquals(7, kafkaSource.getInferParallelism(adminClient));
+    }
+
+    private void setupDescribeTopicsMock(Map<String, List<TopicPartitionInfo>> topicPartitionsMap) {
+        Mockito.when(adminClient.describeTopics(Mockito.any(java.util.Collection.class)))
+                .thenAnswer(
+                        invocation -> {
+                            Collection<String> requestedTopics = invocation.getArgument(0);
+                            Map<String, KafkaFuture<TopicDescription>> result = new HashMap<>();
+                            for (String topic : requestedTopics) {
+                                List<TopicPartitionInfo> partitions = topicPartitionsMap.get(topic);
+                                if (partitions != null) {
+                                    result.put(
+                                            topic,
+                                            KafkaFuture.completedFuture(
+                                                    new TopicDescription(
+                                                            topic, false, partitions)));
+                                }
+                            }
+                            return DescribeTopicsResult.ofTopicNames(result);
+                        });
     }
 }
