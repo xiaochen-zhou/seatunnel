@@ -169,7 +169,8 @@ public class JsonPathTransform extends MultipleFieldOutputTransform {
                                 srcFieldIndex);
             } catch (JsonPathException e) {
                 final JsonPathException ex = e;
-                configIndices.forEach(idx -> fieldValues[idx] = handleJsonPathError(configs.get(idx), ex));
+                configIndices.forEach(
+                        idx -> fieldValues[idx] = handleJsonPathError(configs.get(idx), ex));
                 continue;
             }
 
