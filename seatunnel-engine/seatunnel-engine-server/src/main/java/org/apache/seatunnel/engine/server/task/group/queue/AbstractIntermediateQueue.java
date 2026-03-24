@@ -26,6 +26,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicReference;
 
 public abstract class AbstractIntermediateQueue<T> {
 
@@ -35,12 +36,43 @@ public abstract class AbstractIntermediateQueue<T> {
 
     private final T queue;
 
+    /** Stores the exception that occurred during event processing in async threads (e.g., Disruptor). */
+    @Getter
+    private final AtomicReference<Throwable> asyncException = new AtomicReference<>();
+
     public AbstractIntermediateQueue(T queue) {
         this.queue = queue;
     }
 
     public T getIntermediateQueue() {
         return queue;
+    }
+
+    /**
+     * Records an exception that occurred in an async processing thread.
+     * This exception will be re-thrown in the main task thread during the next collect() call.
+     *
+     * @param ex the exception to record
+     */
+    public void recordException(Throwable ex) {
+        asyncException.compareAndSet(null, ex);
+    }
+
+    /**
+     * Checks if an async exception has been recorded and throws it if present.
+     * This should be called at the beginning of collect() to propagate async exceptions to the main thread.
+     *
+     * @throws Exception if an async exception was recorded
+     */
+    protected void checkException() throws Exception {
+        Throwable ex = asyncException.get();
+        if (ex != null) {
+            if (ex instanceof Exception) {
+                throw (Exception) ex;
+            } else {
+                throw new RuntimeException("Async processing error", ex);
+            }
+        }
     }
 
     public abstract void received(Record<?> record);
