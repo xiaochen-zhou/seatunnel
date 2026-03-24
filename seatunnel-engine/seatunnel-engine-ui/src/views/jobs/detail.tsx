@@ -263,7 +263,7 @@ export default defineComponent({
               <Configuration data={job.envOptions || job.jobDag.envOptions}></Configuration>
             </NTabPane>
             <NTabPane name="Log" tab="Log">
-              <JobLog jobId={job.jobId}></JobLog>
+              <JobLog jobId={job.jobId} job={job}></JobLog>
             </NTabPane>
           </NTabs>
           <NDrawer

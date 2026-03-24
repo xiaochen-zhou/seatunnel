@@ -19,4 +19,22 @@ export default {
   id: 'ID',
   createTime: '开始时间',
   duration: '运行时间',
+  log: {
+    logLevel: '日志级别',
+    search: '搜索',
+    searchPlaceholder: '输入关键词搜索...',
+    errorOnly: '仅错误',
+    warnOnly: '仅警告',
+    showAll: '显示全部',
+    showOnlyErrors: '仅显示 ERROR 级别日志',
+    showOnlyWarnings: '仅显示 WARN 级别日志',
+    noLogs: '暂无日志',
+    showing: '显示',
+    of: '/',
+    lines: '行',
+    noMatchingLines: '没有匹配的日志行',
+    pipeline: '数据流阶段',
+    loading: '加载日志中...',
+    copy: '复制'
+  }
 }

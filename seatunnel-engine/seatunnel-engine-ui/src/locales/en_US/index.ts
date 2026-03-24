@@ -20,11 +20,13 @@ import jobs from '@/locales/en_US/jobs'
 import detail from '@/locales/en_US/detail'
 import common from '@/locales/en_US/common'
 import managers from '@/locales/en_US/managers'
+import auth from '@/locales/en_US/auth'
 
 export default {
   menu,
   jobs,
   detail,
   common,
-  managers
+  managers,
+  auth
 }

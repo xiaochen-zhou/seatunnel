@@ -19,4 +19,22 @@ export default {
   id: 'ID',
   createTime: 'Create Time',
   duration: 'Duration',
+  log: {
+    logLevel: 'Log Level',
+    search: 'Search',
+    searchPlaceholder: 'Enter keyword to search...',
+    errorOnly: 'Error Only',
+    warnOnly: 'Warn Only',
+    showAll: 'Show All',
+    showOnlyErrors: 'Show only ERROR level logs',
+    showOnlyWarnings: 'Show only WARN level logs',
+    noLogs: 'No logs available',
+    showing: 'Showing',
+    of: 'of',
+    lines: 'lines',
+    noMatchingLines: 'No matching log lines',
+    pipeline: 'Pipeline Stages',
+    loading: 'Loading log content...',
+    copy: 'Copy'
+  }
 }

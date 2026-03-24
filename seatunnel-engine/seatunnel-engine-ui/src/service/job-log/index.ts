@@ -19,7 +19,11 @@ import { get } from '@/service/service'
 import type { JobLog } from './types'
 
 export const getJobLogs = (jobId: string) => get<JobLog[]>(`/logs/${jobId}?format=json`)
-export const getJobLogContent = (logName: string) => get<JobLog[]>(`/log/${logName}`)
+export const getJobLogContent = (logLink: string) => {
+  // Directly fetch the log content from the logLink URL
+  // The logLink is the full URL to the log file, e.g., http://10.212.32.42:8080/logs/job-177432444610757733.log
+  return fetch(logLink).then((res) => res.text())
+}
 
 export const JobLogService = {
   getJobLogs,

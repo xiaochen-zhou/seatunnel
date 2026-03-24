@@ -27,6 +27,7 @@ import {
 } from 'naive-ui'
 import { useSettingStore } from '@/store/setting'
 import { useI18n } from 'vue-i18n'
+import LoginModal from '@/components/login-modal'
 
 const App = defineComponent({
   setup() {
@@ -57,6 +58,7 @@ const App = defineComponent({
         <NMessageProvider>
           <NDialogProvider>
             <router-view />
+            <LoginModal />
           </NDialogProvider>
         </NMessageProvider>
       </NConfigProvider>

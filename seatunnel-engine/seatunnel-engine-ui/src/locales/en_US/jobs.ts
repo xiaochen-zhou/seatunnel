@@ -17,5 +17,8 @@
 
 export default {
     runningJobs: 'Running Jobs',
-    finishedJobs: 'Finished Jobs'
+    finishedJobs: 'Finished Jobs',
+    statusFilter: 'Status Filter',
+    allStatus: 'All Status',
+    searchPlaceholder: 'Search by job name or ID'
 }

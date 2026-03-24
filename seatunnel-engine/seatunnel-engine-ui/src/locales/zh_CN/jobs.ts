@@ -17,5 +17,8 @@
 
 export default {
     runningJobs: '运行中',
-    finishedJobs: '已结束'
+    finishedJobs: '已结束',
+    statusFilter: '状态筛选',
+    allStatus: '全部状态',
+    searchPlaceholder: '搜索任务名称或ID'
 }
