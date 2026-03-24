@@ -16,7 +16,7 @@
  */
 
 import { computed, defineComponent, h, onUnmounted, ref, watch } from 'vue'
-import { NDataTable, NTag, NSelect, NInput, NSpace } from 'naive-ui'
+import { NDataTable, NTag, NSelect, NInput, NTooltip, NPopover } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { JobsService } from '@/service/job'
 import type { DataTableColumns } from 'naive-ui'
@@ -34,6 +34,16 @@ const FINISHED_STATUS_OPTIONS: { label: string; value: JobStatus | ''; color?: s
   { label: 'CANCELING', value: 'CANCELING', color: '#f0a020' },
   { label: 'FAILING', value: 'FAILING', color: '#d03050' }
 ]
+
+// Format QPS number
+const formatQPS = (qps: string | undefined) => {
+  if (!qps) return '-'
+  const num = parseFloat(qps)
+  if (isNaN(num)) return '-'
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toFixed(0)
+}
 
 export default defineComponent({
   setup() {
@@ -89,42 +99,138 @@ export default defineComponent({
       const view = (job: Job) => {
         router.push({ name: 'detail', params: { jobId: job.jobId } })
       }
+
       return [
         {
           title: 'No',
           key: 'No',
-          width: 60,
+          width: 50,
           render: (row, index) => h('div', { class: 'text-gray-500' }, index + 1)
         },
         {
           title: 'Id',
           key: 'jobId',
-          sorter: 'default',
-          ellipsis: { tooltip: true }
+          width: 160,
+          ellipsis: { tooltip: true },
+          render: (row) => h('span', { style: { fontSize: '12px', fontFamily: 'monospace' } }, row.jobId)
         },
         {
           title: 'Name',
           key: 'jobName',
-          sorter: 'default',
+          width: 180,
           ellipsis: { tooltip: true }
         },
         {
           title: 'Create Time',
           key: 'createTime',
-          sorter: 'default',
-          width: 180
+          width: 150,
+          render: (row) => h('span', { style: { fontSize: '12px' } }, row.createTime)
         },
         {
           title: 'Finish Time',
           key: 'finishTime',
-          sorter: 'default',
-          width: 180
+          width: 150,
+          render: (row) => h('span', { style: { fontSize: '12px' } }, row.finishTime)
+        },
+        {
+          title: 'Source QPS',
+          key: 'sourceQPS',
+          width: 90,
+          align: 'right',
+          render: (row) => h(
+            'span',
+            { style: { color: '#18a058', fontWeight: '500', fontSize: '12px' } },
+            formatQPS(row.metrics?.SourceReceivedQPS)
+          )
+        },
+        {
+          title: 'Sink QPS',
+          key: 'sinkQPS',
+          width: 90,
+          align: 'right',
+          render: (row) => h(
+            'span',
+            { style: { color: '#2080f0', fontWeight: '500', fontSize: '12px' } },
+            formatQPS(row.metrics?.SinkWriteQPS)
+          )
         },
         {
           title: 'Status',
           key: 'jobStatus',
-          width: 120,
+          width: 110,
           render(row) {
+            const isFailed = row.jobStatus === 'FAILED' || row.jobStatus === 'FAILING'
+            const hasError = isFailed && row.errorMsg
+
+            if (hasError) {
+              return h(
+                NPopover,
+                {
+                  trigger: 'hover',
+                  delay: 1000,
+                  placement: 'left',
+                  width: 500,
+                  scrollable: true
+                },
+                {
+                  trigger: () =>
+                    h(
+                      NTag,
+                      {
+                        bordered: false,
+                        color: getColorFromStatus(row.jobStatus),
+                        round: true,
+                        size: 'small',
+                        style: { cursor: 'help' }
+                      },
+                      () => [row.jobStatus, ' ⚠️']
+                    ),
+                  default: () =>
+                    h(
+                      'div',
+                      {
+                        style: {
+                          maxHeight: '300px',
+                          overflow: 'auto'
+                        }
+                      },
+                      [
+                        h(
+                          'div',
+                          {
+                            style: {
+                              fontWeight: '600',
+                              marginBottom: '8px',
+                              color: '#d03050',
+                              fontSize: '14px'
+                            }
+                          },
+                          '❌ Error Log'
+                        ),
+                        h(
+                          'pre',
+                          {
+                            style: {
+                              margin: 0,
+                              padding: '12px',
+                              backgroundColor: '#1a1a2e',
+                              color: '#ff6b6b',
+                              borderRadius: '8px',
+                              fontSize: '12px',
+                              lineHeight: '1.5',
+                              whiteSpace: 'pre-wrap',
+                              wordBreak: 'break-all',
+                              fontFamily: 'Consolas, Monaco, monospace'
+                            }
+                          },
+                          row.errorMsg
+                        )
+                      ]
+                    )
+                }
+              )
+            }
+
             return (
               <NTag bordered={false} color={getColorFromStatus(row.jobStatus)} round size="small">
                 {row.jobStatus}
@@ -135,7 +241,7 @@ export default defineComponent({
         {
           title: 'Action',
           key: 'actions',
-          width: 100,
+          width: 80,
           render(row) {
             return h(
               NButton,

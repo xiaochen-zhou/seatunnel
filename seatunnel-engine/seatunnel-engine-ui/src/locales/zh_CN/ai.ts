@@ -18,12 +18,13 @@
 export default {
   title: 'AI 助手',
   welcome: '欢迎使用 AI 助手',
-  welcomeHint: '有关于 SeaTunnel 的问题都可以问我！',
+  welcomeHint: '有关于 SeaTunnel 的问题都可以问我！我可以帮助您分析任务、诊断错误、配置参数等。',
   inputPlaceholder: '输入您的问题...',
   newChat: '新建会话',
   history: '历史记录',
   settings: '设置',
   provider: '服务提供商',
+  appType: '应用类型',
   skills: '技能',
   messages: '条消息',
   today: '今天',
@@ -31,5 +32,7 @@ export default {
   confirmDelete: '确定删除此会话？',
   confirmClearAll: '确定清空所有会话？',
   clearAll: '清空全部',
-  noHistory: '暂无历史记录'
+  noHistory: '暂无历史记录',
+  you: '我',
+  assistant: 'AI 助手'
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { defineComponent, ref, nextTick, watch, Transition } from 'vue'
+import { defineComponent, ref, nextTick, watch, Transition, computed } from 'vue'
 import {
   NButton,
   NInput,
@@ -31,6 +31,13 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useAIStore } from './store'
 import type { Message, Skill, Conversation } from './types'
+import { marked } from 'marked'
+
+// Configure marked for safe rendering
+marked.setOptions({
+  breaks: true,
+  gfm: true
+})
 
 export default defineComponent({
   name: 'AIAssistant',
@@ -97,32 +104,52 @@ export default defineComponent({
             display: 'flex',
             flexDirection: 'column',
             alignItems: isUser ? 'flex-end' : 'flex-start',
-            marginBottom: '16px'
+            marginBottom: '20px',
+            animation: 'fadeInUp 0.3s ease-out'
           }}
         >
+          {/* Role label */}
+          <div
+            style={{
+              fontSize: '12px',
+              fontWeight: '600',
+              color: isUser ? '#667eea' : '#11998e',
+              marginBottom: '6px',
+              paddingLeft: isUser ? '0' : '48px',
+              paddingRight: isUser ? '48px' : '0',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            {isUser ? (t('ai.you') || 'You') : (t('ai.assistant') || 'AI Assistant')}
+          </div>
+
           <div
             style={{
               display: 'flex',
-              alignItems: 'flex-end',
-              gap: '8px',
+              alignItems: 'flex-start',
+              gap: '12px',
               flexDirection: isUser ? 'row-reverse' : 'row',
-              maxWidth: '85%'
+              maxWidth: '90%'
             }}
           >
             {/* Avatar */}
             <div
               style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                borderRadius: '12px',
                 background: isUser
                   ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                   : 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '14px',
-                flexShrink: 0
+                fontSize: '16px',
+                flexShrink: 0,
+                boxShadow: isUser
+                  ? '0 4px 12px rgba(102, 126, 234, 0.3)'
+                  : '0 4px 12px rgba(17, 153, 142, 0.3)'
               }}
             >
               {isUser ? '👤' : '🤖'}
@@ -130,29 +157,49 @@ export default defineComponent({
 
             {/* Message content */}
             <div
+              class={isUser ? 'user-message' : 'ai-message markdown-body'}
               style={{
-                padding: '12px 16px',
-                borderRadius: isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                backgroundColor: isUser ? '#667eea' : '#f0f2f5',
-                color: isUser ? '#fff' : '#1a1a2e',
+                padding: '14px 18px',
+                borderRadius: isUser ? '20px 20px 6px 20px' : '20px 20px 20px 6px',
+                backgroundColor: isUser
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : '#ffffff',
+                background: isUser
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : '#ffffff',
+                color: isUser ? '#fff' : '#2d3748',
                 fontSize: '14px',
-                lineHeight: '1.6',
+                lineHeight: '1.7',
                 wordBreak: 'break-word',
-                whiteSpace: 'pre-wrap',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                boxShadow: isUser
+                  ? '0 4px 15px rgba(102, 126, 234, 0.25)'
+                  : '0 2px 12px rgba(0, 0, 0, 0.08)',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                letterSpacing: '0.2px',
+                border: isUser ? 'none' : '1px solid #e8ecf1'
               }}
             >
               {msg.status === 'streaming' && !msg.content ? (
-                <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', gap: '6px', padding: '4px 0' }}>
                   <span class="typing-dot" style={{ animationDelay: '0s' }}>●</span>
                   <span class="typing-dot" style={{ animationDelay: '0.2s' }}>●</span>
                   <span class="typing-dot" style={{ animationDelay: '0.4s' }}>●</span>
                 </div>
+              ) : isUser ? (
+                <span style={{ display: 'block', fontWeight: '400', whiteSpace: 'pre-wrap' }}>
+                  {msg.content}
+                </span>
               ) : (
-                msg.content
+                <div
+                  innerHTML={marked.parse(msg.content || '') as string}
+                  style={{ fontWeight: '400' }}
+                />
               )}
               {msg.status === 'error' && (
-                <span style={{ color: isUser ? '#ffcccc' : '#d03050' }}> ⚠️</span>
+                <span style={{
+                  color: isUser ? '#ffcccc' : '#e53e3e',
+                  marginLeft: '6px'
+                }}> ⚠️</span>
               )}
             </div>
           </div>
@@ -163,14 +210,30 @@ export default defineComponent({
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              marginTop: '4px',
-              paddingLeft: isUser ? '0' : '40px',
-              paddingRight: isUser ? '40px' : '0'
+              marginTop: '8px',
+              paddingLeft: isUser ? '0' : '48px',
+              paddingRight: isUser ? '48px' : '0'
             }}
           >
-            <span style={{ fontSize: '11px', color: '#999' }}>{formatTime(msg.timestamp)}</span>
+            <span style={{
+              fontSize: '11px',
+              color: '#a0aec0',
+              fontWeight: '500'
+            }}>
+              {formatTime(msg.timestamp)}
+            </span>
             {msg.skillUsed && (
-              <NTag size="tiny" round bordered={false}>
+              <NTag
+                size="tiny"
+                round
+                bordered={false}
+                style={{
+                  backgroundColor: '#edf2f7',
+                  color: '#4a5568',
+                  fontSize: '10px',
+                  padding: '2px 8px'
+                }}
+              >
                 {store.skills.value.find(s => s.id === msg.skillUsed)?.icon}{' '}
                 {store.skills.value.find(s => s.id === msg.skillUsed)?.name}
               </NTag>
@@ -570,24 +633,73 @@ export default defineComponent({
 
                 {/* Chat Messages */}
                 {!store.isSettingsOpen.value && !store.isHistoryOpen.value && (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    overflow: 'hidden',
+                    background: 'linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%)'
+                  }}>
                     <NScrollbar style={{ flex: 1 }}>
-                      <div style={{ padding: '20px' }}>
+                      <div style={{ padding: '24px 28px' }}>
                         {!store.currentConversation.value ||
                         store.currentConversation.value.messages.length === 0 ? (
                           <div
                             style={{
                               textAlign: 'center',
-                              padding: '40px 20px',
-                              color: '#666'
+                              padding: '60px 30px',
+                              color: '#4a5568'
                             }}
                           >
-                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🤖</div>
-                            <div style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
+                            <div style={{
+                              fontSize: '64px',
+                              marginBottom: '20px',
+                              filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))'
+                            }}>🤖</div>
+                            <div style={{
+                              fontSize: '22px',
+                              fontWeight: '700',
+                              marginBottom: '12px',
+                              color: '#2d3748',
+                              letterSpacing: '-0.5px'
+                            }}>
                               {t('ai.welcome') || 'Welcome to AI Assistant'}
                             </div>
-                            <div style={{ fontSize: '14px', color: '#999' }}>
-                              {t('ai.welcomeHint') || 'Ask me anything about SeaTunnel!'}
+                            <div style={{
+                              fontSize: '15px',
+                              color: '#718096',
+                              lineHeight: '1.6',
+                              maxWidth: '400px',
+                              margin: '0 auto'
+                            }}>
+                              {t('ai.welcomeHint') || 'Ask me anything about SeaTunnel! I can help with job analysis, error diagnosis, configuration, and more.'}
+                            </div>
+                            <div style={{
+                              marginTop: '32px',
+                              display: 'flex',
+                              gap: '12px',
+                              justifyContent: 'center',
+                              flexWrap: 'wrap'
+                            }}>
+                              {store.skills.value.filter(s => s.enabled).slice(0, 3).map(skill => (
+                                <div
+                                  key={skill.id}
+                                  style={{
+                                    padding: '10px 16px',
+                                    backgroundColor: '#fff',
+                                    borderRadius: '12px',
+                                    fontSize: '13px',
+                                    color: '#4a5568',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                                    border: '1px solid #e2e8f0',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                  }}
+                                  onClick={() => { selectedSkill.value = skill.id }}
+                                >
+                                  {skill.icon} {skill.name}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : (
@@ -600,12 +712,12 @@ export default defineComponent({
                     {/* Skills Bar */}
                     <div
                       style={{
-                        padding: '8px 16px',
-                        borderTop: '1px solid #f0f0f0',
+                        padding: '10px 20px',
+                        borderTop: '1px solid #e2e8f0',
                         display: 'flex',
-                        gap: '8px',
+                        gap: '10px',
                         overflowX: 'auto',
-                        backgroundColor: '#fafbfc'
+                        backgroundColor: '#fff'
                       }}
                     >
                       {store.skills.value.filter(s => s.enabled).map(renderSkillButton)}
@@ -614,8 +726,8 @@ export default defineComponent({
                     {/* Input Area */}
                     <div
                       style={{
-                        padding: '16px',
-                        borderTop: '1px solid #f0f0f0',
+                        padding: '16px 20px 20px',
+                        borderTop: '1px solid #e2e8f0',
                         backgroundColor: '#fff'
                       }}
                     >
@@ -632,7 +744,13 @@ export default defineComponent({
                           disabled={store.isStreaming.value}
                           type="textarea"
                           autosize={{ minRows: 1, maxRows: 4 }}
-                          style={{ borderRadius: '12px 0 0 12px' }}
+                          style={{
+                            borderRadius: '14px 0 0 14px',
+                            fontSize: '14px',
+                            backgroundColor: '#f7fafc',
+                            border: '2px solid #e2e8f0',
+                            transition: 'all 0.2s ease'
+                          }}
                         />
                         <NButton
                           type="primary"
@@ -640,9 +758,13 @@ export default defineComponent({
                           disabled={!inputValue.value.trim() || store.isStreaming.value}
                           loading={store.isStreaming.value}
                           style={{
-                            borderRadius: '0 12px 12px 0',
+                            borderRadius: '0 14px 14px 0',
                             height: 'auto',
-                            minHeight: '34px'
+                            minHeight: '42px',
+                            minWidth: '50px',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            border: 'none',
+                            fontSize: '18px'
                           }}
                         >
                           {store.isStreaming.value ? '' : '📤'}
@@ -671,7 +793,8 @@ export default defineComponent({
           .typing-dot {
             display: inline-block;
             animation: typing-bounce 1.4s infinite ease-in-out both;
-            color: #666;
+            color: #a0aec0;
+            font-size: 18px;
           }
 
           @keyframes typing-bounce {
@@ -683,6 +806,119 @@ export default defineComponent({
               transform: scale(1);
               opacity: 1;
             }
+          }
+
+          @keyframes fadeInUp {
+            from {
+              opacity: 0;
+              transform: translateY(10px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          /* Custom scrollbar */
+          .n-scrollbar-content::-webkit-scrollbar {
+            width: 6px;
+          }
+          .n-scrollbar-content::-webkit-scrollbar-track {
+            background: transparent;
+          }
+          .n-scrollbar-content::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 3px;
+          }
+          .n-scrollbar-content::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+          }
+
+          /* Markdown styles for AI messages */
+          .markdown-body {
+            line-height: 1.7;
+          }
+          .markdown-body p {
+            margin: 0 0 12px 0;
+          }
+          .markdown-body p:last-child {
+            margin-bottom: 0;
+          }
+          .markdown-body strong {
+            font-weight: 600;
+            color: #1a202c;
+          }
+          .markdown-body em {
+            font-style: italic;
+          }
+          .markdown-body code {
+            background-color: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+            font-size: 13px;
+            color: #e53e3e;
+          }
+          .markdown-body pre {
+            background-color: #1a202c;
+            padding: 12px 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 12px 0;
+          }
+          .markdown-body pre code {
+            background: none;
+            padding: 0;
+            color: #e2e8f0;
+            font-size: 13px;
+          }
+          .markdown-body ul, .markdown-body ol {
+            margin: 8px 0;
+            padding-left: 24px;
+          }
+          .markdown-body li {
+            margin: 4px 0;
+          }
+          .markdown-body blockquote {
+            border-left: 4px solid #667eea;
+            padding-left: 16px;
+            margin: 12px 0;
+            color: #4a5568;
+            font-style: italic;
+          }
+          .markdown-body a {
+            color: #667eea;
+            text-decoration: none;
+          }
+          .markdown-body a:hover {
+            text-decoration: underline;
+          }
+          .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+            margin: 16px 0 8px 0;
+            font-weight: 600;
+            color: #1a202c;
+          }
+          .markdown-body h1 { font-size: 1.5em; }
+          .markdown-body h2 { font-size: 1.3em; }
+          .markdown-body h3 { font-size: 1.1em; }
+          .markdown-body hr {
+            border: none;
+            border-top: 1px solid #e2e8f0;
+            margin: 16px 0;
+          }
+          .markdown-body table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 12px 0;
+          }
+          .markdown-body th, .markdown-body td {
+            border: 1px solid #e2e8f0;
+            padding: 8px 12px;
+            text-align: left;
+          }
+          .markdown-body th {
+            background-color: #f7fafc;
+            font-weight: 600;
           }
         `}</style>
       </>

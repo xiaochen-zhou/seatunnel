@@ -16,7 +16,7 @@
  */
 
 import { computed, defineComponent, h, onUnmounted, ref } from 'vue'
-import { NDataTable, NTag, NSelect, NInput, NSpace, NIcon, NDivider } from 'naive-ui'
+import { NDataTable, NTag, NSelect, NInput, NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { JobsService } from '@/service/job'
 import type { DataTableColumns } from 'naive-ui'
@@ -35,6 +35,16 @@ const RUNNING_STATUS_OPTIONS: { label: string; value: JobStatus | ''; color?: st
   { label: 'DOING_SAVEPOINT', value: 'DOING_SAVEPOINT', color: '#f0a020' },
   { label: 'SAVEPOINT_DONE', value: 'SAVEPOINT_DONE', color: '#18a058' }
 ]
+
+// Format QPS number
+const formatQPS = (qps: string | undefined) => {
+  if (!qps) return '-'
+  const num = parseFloat(qps)
+  if (isNaN(num)) return '-'
+  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1) + 'K'
+  return num.toFixed(0)
+}
 
 export default defineComponent({
   setup() {
@@ -92,31 +102,54 @@ export default defineComponent({
         {
           title: 'No',
           key: 'No',
-          width: 60,
+          width: 50,
           render: (row: Job, index: number) => h('div', { class: 'text-gray-500' }, index + 1)
         },
         {
           title: 'Id',
           key: 'jobId',
-          sorter: 'default',
-          ellipsis: { tooltip: true }
+          width: 160,
+          ellipsis: { tooltip: true },
+          render: (row) => h('span', { style: { fontSize: '12px', fontFamily: 'monospace' } }, row.jobId)
         },
         {
           title: 'Name',
           key: 'jobName',
-          sorter: 'default',
+          width: 180,
           ellipsis: { tooltip: true }
         },
         {
           title: 'Create Time',
           key: 'createTime',
-          sorter: 'default',
-          width: 180
+          width: 160,
+          render: (row) => h('span', { style: { fontSize: '12px' } }, row.createTime)
+        },
+        {
+          title: 'Source QPS',
+          key: 'sourceQPS',
+          width: 100,
+          align: 'right',
+          render: (row) => h(
+            'span',
+            { style: { color: '#18a058', fontWeight: '500', fontSize: '13px' } },
+            formatQPS(row.metrics?.SourceReceivedQPS)
+          )
+        },
+        {
+          title: 'Sink QPS',
+          key: 'sinkQPS',
+          width: 100,
+          align: 'right',
+          render: (row) => h(
+            'span',
+            { style: { color: '#2080f0', fontWeight: '500', fontSize: '13px' } },
+            formatQPS(row.metrics?.SinkWriteQPS)
+          )
         },
         {
           title: 'Status',
           key: 'jobStatus',
-          width: 140,
+          width: 120,
           render(row) {
             return (
               <NTag bordered={false} color={getColorFromStatus(row.jobStatus)} round size="small">
@@ -128,7 +161,7 @@ export default defineComponent({
         {
           title: 'Action',
           key: 'actions',
-          width: 100,
+          width: 80,
           render(row) {
             return h(
               NButton,

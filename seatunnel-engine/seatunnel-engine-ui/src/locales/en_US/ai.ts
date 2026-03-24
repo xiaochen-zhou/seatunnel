@@ -18,12 +18,13 @@
 export default {
   title: 'AI Assistant',
   welcome: 'Welcome to AI Assistant',
-  welcomeHint: 'Ask me anything about SeaTunnel!',
+  welcomeHint: 'Ask me anything about SeaTunnel! I can help with job analysis, error diagnosis, configuration, and more.',
   inputPlaceholder: 'Type your message...',
   newChat: 'New Chat',
   history: 'Chat History',
   settings: 'Settings',
   provider: 'Provider',
+  appType: 'App Type',
   skills: 'Skills',
   messages: 'messages',
   today: 'Today',
@@ -31,5 +32,7 @@ export default {
   confirmDelete: 'Delete this conversation?',
   confirmClearAll: 'Clear all conversations?',
   clearAll: 'Clear All',
-  noHistory: 'No chat history'
+  noHistory: 'No chat history',
+  you: 'You',
+  assistant: 'AI Assistant'
 }
