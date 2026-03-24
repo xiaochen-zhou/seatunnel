@@ -108,9 +108,8 @@ export default defineComponent({
         {
           title: 'Id',
           key: 'jobId',
-          width: 160,
-          ellipsis: { tooltip: true },
-          render: (row) => h('span', { style: { fontSize: '12px', fontFamily: 'monospace' } }, row.jobId)
+          width: 180,
+          ellipsis: { tooltip: true }
         },
         {
           title: 'Name',
@@ -121,8 +120,7 @@ export default defineComponent({
         {
           title: 'Create Time',
           key: 'createTime',
-          width: 160,
-          render: (row) => h('span', { style: { fontSize: '12px' } }, row.createTime)
+          width: 170
         },
         {
           title: 'Source QPS',
