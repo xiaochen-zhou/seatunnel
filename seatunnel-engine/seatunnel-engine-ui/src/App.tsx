@@ -28,6 +28,7 @@ import {
 import { useSettingStore } from '@/store/setting'
 import { useI18n } from 'vue-i18n'
 import LoginModal from '@/components/login-modal'
+import AIAssistant from '@/components/ai-assistant'
 
 const App = defineComponent({
   setup() {
@@ -59,6 +60,7 @@ const App = defineComponent({
           <NDialogProvider>
             <router-view />
             <LoginModal />
+            <AIAssistant />
           </NDialogProvider>
         </NMessageProvider>
       </NConfigProvider>

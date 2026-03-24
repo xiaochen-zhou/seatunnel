@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-import menu from '@/locales/en_US/menu'
-import jobs from '@/locales/en_US/jobs'
-import detail from '@/locales/en_US/detail'
-import common from '@/locales/en_US/common'
-import managers from '@/locales/en_US/managers'
-import auth from '@/locales/en_US/auth'
-import ai from '@/locales/en_US/ai'
-
 export default {
-  menu,
-  jobs,
-  detail,
-  common,
-  managers,
-  auth,
-  ai
+  title: 'AI Assistant',
+  welcome: 'Welcome to AI Assistant',
+  welcomeHint: 'Ask me anything about SeaTunnel!',
+  inputPlaceholder: 'Type your message...',
+  newChat: 'New Chat',
+  history: 'Chat History',
+  settings: 'Settings',
+  provider: 'Provider',
+  skills: 'Skills',
+  messages: 'messages',
+  today: 'Today',
+  yesterday: 'Yesterday',
+  confirmDelete: 'Delete this conversation?',
+  confirmClearAll: 'Clear all conversations?',
+  clearAll: 'Clear All',
+  noHistory: 'No chat history'
 }

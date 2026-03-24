@@ -21,6 +21,7 @@ import detail from '@/locales/zh_CN/detail'
 import common from '@/locales/zh_CN/common'
 import managers from '@/locales/zh_CN/managers'
 import auth from '@/locales/zh_CN/auth'
+import ai from '@/locales/zh_CN/ai'
 
 export default {
   menu,
@@ -28,5 +29,6 @@ export default {
   detail,
   common,
   managers,
-  auth
+  auth,
+  ai
 }

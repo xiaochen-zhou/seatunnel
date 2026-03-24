@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-import menu from '@/locales/en_US/menu'
-import jobs from '@/locales/en_US/jobs'
-import detail from '@/locales/en_US/detail'
-import common from '@/locales/en_US/common'
-import managers from '@/locales/en_US/managers'
-import auth from '@/locales/en_US/auth'
-import ai from '@/locales/en_US/ai'
-
 export default {
-  menu,
-  jobs,
-  detail,
-  common,
-  managers,
-  auth,
-  ai
+  title: 'AI 助手',
+  welcome: '欢迎使用 AI 助手',
+  welcomeHint: '有关于 SeaTunnel 的问题都可以问我！',
+  inputPlaceholder: '输入您的问题...',
+  newChat: '新建会话',
+  history: '历史记录',
+  settings: '设置',
+  provider: '服务提供商',
+  skills: '技能',
+  messages: '条消息',
+  today: '今天',
+  yesterday: '昨天',
+  confirmDelete: '确定删除此会话？',
+  confirmClearAll: '确定清空所有会话？',
+  clearAll: '清空全部',
+  noHistory: '暂无历史记录'
 }
