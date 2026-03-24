@@ -49,6 +49,8 @@ import org.apache.seatunnel.format.compatible.kafka.connect.json.KafkaConnectJso
 import org.apache.seatunnel.format.compatible.kafka.connect.json.NativeKafkaConnectDeserializationSchema;
 import org.apache.seatunnel.format.json.JsonDeserializationSchema;
 import org.apache.seatunnel.format.json.canal.CanalJsonDeserializationSchema;
+import org.apache.seatunnel.format.json.custom.CustomCdcConfig;
+import org.apache.seatunnel.format.json.custom.CustomCdcDeserializationSchema;
 import org.apache.seatunnel.format.json.debezium.DebeziumJsonDeserializationSchema;
 import org.apache.seatunnel.format.json.debezium.DebeziumJsonDeserializationSchemaDispatcher;
 import org.apache.seatunnel.format.json.exception.SeaTunnelJsonFormatException;
@@ -84,6 +86,7 @@ import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaBaseCo
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.BOOTSTRAP_SERVERS;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.COMMIT_ON_CHECKPOINT;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.CONSUMER_GROUP;
+import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.CUSTOM_CONFIG;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.DEBEZIUM_RECORD_INCLUDE_SCHEMA;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.DEBEZIUM_RECORD_TABLE_FILTER;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.FIELD_DELIMITER;
@@ -417,6 +420,13 @@ public class KafkaSourceConfig implements Serializable {
                     } else {
                         schema = new ProtobufDeserializationSchema(catalogTable);
                     }
+                    break;
+                case CUSTOM:
+                    CustomCdcConfig customCdcConfig = readonlyConfig.get(CUSTOM_CONFIG);
+                    if (customCdcConfig == null) {
+                        customCdcConfig = new CustomCdcConfig();
+                    }
+                    schema = new CustomCdcDeserializationSchema(catalogTable, customCdcConfig);
                     break;
                 default:
                     throw new SeaTunnelJsonFormatException(

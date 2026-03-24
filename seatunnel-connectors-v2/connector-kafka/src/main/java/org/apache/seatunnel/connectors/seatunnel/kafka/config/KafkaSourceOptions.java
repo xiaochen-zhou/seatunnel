@@ -21,6 +21,7 @@ import org.apache.seatunnel.shade.com.fasterxml.jackson.core.type.TypeReference;
 
 import org.apache.seatunnel.api.configuration.Option;
 import org.apache.seatunnel.api.configuration.Options;
+import org.apache.seatunnel.format.json.custom.CustomCdcConfig;
 
 import java.util.Map;
 
@@ -134,4 +135,14 @@ public class KafkaSourceOptions extends KafkaBaseOptions {
                             "Whether to strip the Confluent Schema Registry wire format header "
                                     + "(magic byte, schema id and message indexes) before "
                                     + "protobuf deserialization.");
+
+    public static final Option<CustomCdcConfig> CUSTOM_CONFIG =
+            Options.key("custom")
+                    .type(new TypeReference<CustomCdcConfig>() {})
+                    .noDefaultValue()
+                    .withDescription(
+                            "Configuration for custom CDC JSON format. "
+                                    + "This allows users to define their own CDC format mapping through configuration. "
+                                    + "Available options: opField, opInsert, opUpdate, opDelete, dataField, dataIsArray, "
+                                    + "valueExtractPath, oldDataField, timestampField, timestampMultiplier, databaseField, tableField, ignoreParseErrors.");
 }

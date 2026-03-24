@@ -28,5 +28,6 @@ public enum MessageFormat {
     AVRO,
     MAXWELL_JSON,
     PROTOBUF,
-    NATIVE
+    NATIVE,
+    CUSTOM
 }

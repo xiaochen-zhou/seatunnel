@@ -121,6 +121,11 @@ public class KafkaFormatIT extends TestSuiteBase implements TestResource {
     private static final String DEBEZIUM_DATA_PATH = "/debezium/debezium_data.txt";
     private static final String DEBEZIUM_KAFKA_SOURCE_TOPIC = "dbserver1.debezium.products";
 
+    // ---------------------------Custom CDC Format Parameter  ---------------------------------------
+    private static final String CUSTOM_CDC_DATA_PATH = "/custom/custom_cdc_data.txt";
+    private static final String CUSTOM_CDC_KAFKA_SOURCE_TOPIC = "test-custom-cdc-source";
+    private static final String CUSTOM_CDC_KAFKA_SINK_TOPIC = "test-custom-cdc-sink";
+
     private static final String PG_SINK_TABLE1 = "sink";
     private static final String PG_SINK_TABLE2 = "sink2";
 
@@ -248,6 +253,7 @@ public class KafkaFormatIT extends TestSuiteBase implements TestResource {
                         put(MAXWELL_DATA_PATH, MAXWELL_KAFKA_SOURCE_TOPIC);
                         put(COMPATIBLE_DATA_PATH, COMPATIBLE_KAFKA_SOURCE_TOPIC);
                         put(DEBEZIUM_DATA_PATH, DEBEZIUM_KAFKA_SOURCE_TOPIC);
+                        put(CUSTOM_CDC_DATA_PATH, CUSTOM_CDC_KAFKA_SOURCE_TOPIC);
                     }
                 };
     }
@@ -442,6 +448,26 @@ public class KafkaFormatIT extends TestSuiteBase implements TestResource {
 
         // Check MaxWell
         checkMaxWellFormat();
+    }
+
+    @TestTemplate
+    public void testFormatCustomCdcCheck(TestContainer container)
+            throws IOException, InterruptedException {
+
+        LOG.info("====================== Check Custom CDC ======================");
+        // check Custom CDC to Kafka
+        Container.ExecResult checkCustomCdcResultToKafka =
+                container.executeJob("/customFormatIT/kafka_source_custom_to_kafka.conf");
+        Assertions.assertEquals(
+                0, checkCustomCdcResultToKafka.getExitCode(), checkCustomCdcResultToKafka.getStderr());
+
+        Container.ExecResult checkCustomCdcResultToPgSql =
+                container.executeJob("/customFormatIT/kafka_source_custom_cdc_to_pgsql.conf");
+        Assertions.assertEquals(
+                0, checkCustomCdcResultToPgSql.getExitCode(), checkCustomCdcResultToPgSql.getStderr());
+
+        // Check Custom CDC
+        checkCustomCdcFormat();
     }
 
     private void checkFormatCanalAndOgg() {
@@ -855,6 +881,39 @@ public class KafkaFormatIT extends TestSuiteBase implements TestResource {
             }
         }
         Assertions.assertIterableEquals(expected, actual);
+    }
+
+    private void checkCustomCdcFormat() {
+        LOG.info(
+                "==================== start kafka Custom CDC format to pg check ====================");
+
+        List<List<Object>> postgreSinkTableList = getPostgreSinkTableList(PG_SINK_TABLE1);
+
+        // Expected: 9 INSERTs + 4 UPDATEs (final state) + 1 DELETE (id=111) = 10 records
+        // After CDC operations: ids 101-110 should exist, id 111 deleted
+        List<List<Object>> expected =
+                Stream.<List<Object>>of(
+                                Arrays.asList(101, "scooter", "Small 2-wheel scooter", "3.14"),
+                                Arrays.asList(102, "car battery", "12V car battery", "8.1"),
+                                Arrays.asList(
+                                        103,
+                                        "12-pack drill bits",
+                                        "12-pack of drill bits with sizes ranging from #40 to #3",
+                                        "0.8"),
+                                Arrays.asList(104, "hammer", "12oz carpenter's hammer", "0.75"),
+                                Arrays.asList(105, "hammer", "14oz carpenter's hammer", "0.875"),
+                                Arrays.asList(106, "hammer", "18oz carpenter hammer", "1.0"),
+                                Arrays.asList(107, "rocks", "box of assorted rocks", "5.1"),
+                                Arrays.asList(
+                                        108, "jacket", "water resistent black wind breaker", "0.1"),
+                                Arrays.asList(109, "spare tire", "24 inch spare tire", "22.2"),
+                                Arrays.asList(
+                                        110,
+                                        "jacket",
+                                        "new water resistent white wind breaker",
+                                        "0.5"))
+                        .collect(Collectors.toList());
+        Assertions.assertIterableEquals(expected, postgreSinkTableList);
     }
 
     private void checkCompatibleFormat() {
