@@ -18,6 +18,7 @@
 package org.apache.seatunnel.engine.server.rest.filter;
 
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.seatunnel.shade.org.apache.commons.lang3.exception.ExceptionUtils;
 
 import org.apache.seatunnel.engine.server.rest.ErrResponse;
 
@@ -64,29 +65,13 @@ public class ExceptionHandlingFilter implements Filter {
         response.setContentType("application/json;charset=UTF-8");
 
         ErrResponse errorResponse = new ErrResponse();
-        errorResponse.setMessage(buildDetailedErrorMessage(e));
+        errorResponse.setMessage(ExceptionUtils.getStackTrace(e));
         errorResponse.setStatus("fail");
 
         String jsonResponse = objectMapper.writeValueAsString(errorResponse);
         response.getWriter().write(jsonResponse);
 
         log.error("Error occurred while processing request", e);
-    }
-
-    private String buildDetailedErrorMessage(Throwable e) {
-        StringBuilder message = new StringBuilder();
-        message.append(e.getMessage());
-
-        Throwable cause = e.getCause();
-        while (cause != null) {
-            message.append("\nCaused by: ").append(cause.getClass().getName());
-            if (cause.getMessage() != null) {
-                message.append(": ").append(cause.getMessage());
-            }
-            cause = cause.getCause();
-        }
-
-        return message.toString();
     }
 
     @Override
