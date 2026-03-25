@@ -36,9 +36,11 @@ public abstract class AbstractIntermediateQueue<T> {
 
     private final T queue;
 
-    /** Stores the exception that occurred during event processing in async threads (e.g., Disruptor). */
-    @Getter
-    private final AtomicReference<Throwable> asyncException = new AtomicReference<>();
+    /**
+     * Stores the exception that occurred during event processing in async threads (e.g.,
+     * Disruptor).
+     */
+    @Getter private final AtomicReference<Throwable> asyncException = new AtomicReference<>();
 
     public AbstractIntermediateQueue(T queue) {
         this.queue = queue;
@@ -49,8 +51,8 @@ public abstract class AbstractIntermediateQueue<T> {
     }
 
     /**
-     * Records an exception that occurred in an async processing thread.
-     * This exception will be re-thrown in the main task thread during the next collect() call.
+     * Records an exception that occurred in an async processing thread. This exception will be
+     * re-thrown in the main task thread during the next collect() call.
      *
      * @param ex the exception to record
      */
@@ -59,8 +61,8 @@ public abstract class AbstractIntermediateQueue<T> {
     }
 
     /**
-     * Checks if an async exception has been recorded and throws it if present.
-     * This should be called at the beginning of collect() to propagate async exceptions to the main thread.
+     * Checks if an async exception has been recorded and throws it if present. This should be
+     * called at the beginning of collect() to propagate async exceptions to the main thread.
      *
      * @throws Exception if an async exception was recorded
      */

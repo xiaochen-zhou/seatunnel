@@ -72,7 +72,7 @@ public class IntermediateDisruptor extends AbstractIntermediateQueue<Disruptor<R
                     "Exception occurred while processing event in Disruptor, sequence: {}",
                     sequence,
                     ex);
-						recordException(ex);
+            recordException(ex);
         }
 
         @Override
