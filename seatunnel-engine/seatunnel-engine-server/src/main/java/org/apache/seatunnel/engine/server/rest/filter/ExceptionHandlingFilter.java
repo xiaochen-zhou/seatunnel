@@ -18,11 +18,11 @@
 package org.apache.seatunnel.engine.server.rest.filter;
 
 import org.apache.seatunnel.shade.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.seatunnel.shade.org.apache.commons.lang3.exception.ExceptionUtils;
 
 import org.apache.seatunnel.engine.server.rest.ErrResponse;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.seatunnel.shade.org.apache.commons.lang3.exception.ExceptionUtils;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
