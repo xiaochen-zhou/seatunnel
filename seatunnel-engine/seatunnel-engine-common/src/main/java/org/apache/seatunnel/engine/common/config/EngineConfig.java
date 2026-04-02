@@ -20,6 +20,7 @@ package org.apache.seatunnel.engine.common.config;
 import org.apache.seatunnel.engine.common.config.server.CheckpointConfig;
 import org.apache.seatunnel.engine.common.config.server.ConnectorJarStorageConfig;
 import org.apache.seatunnel.engine.common.config.server.CoordinatorServiceConfig;
+import org.apache.seatunnel.engine.common.config.server.DataSourceConfig;
 import org.apache.seatunnel.engine.common.config.server.HttpConfig;
 import org.apache.seatunnel.engine.common.config.server.QueueType;
 import org.apache.seatunnel.engine.common.config.server.ScheduleStrategy;
@@ -101,6 +102,7 @@ public class EngineConfig {
 
     private ParallelismInferConfig parallelismInferConfig =
             ServerConfigOptions.MasterServerConfigOptions.PARALLELISM_INFER.defaultValue();
+    private DataSourceConfig dataSourceConfig = ServerConfigOptions.DATASOURCE.defaultValue();
 
     public void setBackupCount(int newBackupCount) {
         checkBackupCount(newBackupCount, 0);
