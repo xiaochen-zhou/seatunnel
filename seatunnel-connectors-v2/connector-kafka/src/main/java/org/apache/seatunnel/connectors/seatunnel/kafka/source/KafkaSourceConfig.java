@@ -59,19 +59,27 @@ import org.apache.seatunnel.format.protobuf.SchemaRegistryAwareProtobufDeseriali
 import org.apache.seatunnel.format.text.TextDeserializationSchema;
 import org.apache.seatunnel.format.text.constant.TextFormatConstant;
 
+import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.collections4.MapUtils;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.TopicPartition;
 
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaBaseConstants.HEADERS;
@@ -104,6 +112,7 @@ import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSource
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.STRIP_SCHEMA_REGISTRY_HEADER;
 import static org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaSourceOptions.TOPIC;
 
+@Slf4j
 public class KafkaSourceConfig implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -456,5 +465,59 @@ public class KafkaSourceConfig implements Serializable {
                         PhysicalColumn.of(
                                 VALUE, PrimitiveByteArrayType.INSTANCE, 0, false, null, null))
                 .build();
+    }
+
+    /**
+     * Get the total partition count for all configured topics. This method connects to Kafka to
+     * fetch partition information.
+     *
+     * @return total partition count, or 1 if unable to determine
+     */
+    public int getTotalPartitionCount() {
+        Properties props = new Properties();
+        props.putAll(this.properties);
+        props.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, this.bootstrap);
+        props.setProperty(
+                ConsumerConfig.CLIENT_ID_CONFIG,
+                "seatunnel-parallelism-infer-" + System.currentTimeMillis());
+
+        return getTotalPartitionCount(AdminClient.create(props));
+    }
+
+    @VisibleForTesting
+    public int getTotalPartitionCount(AdminClient adminClient) {
+        try {
+            Set<String> topics = new HashSet<>();
+            for (ConsumerMetadata metadata : mapMetadata.values()) {
+                if (metadata.isPattern()) {
+                    Pattern pattern = Pattern.compile(metadata.getTopic());
+                    topics.addAll(
+                            adminClient.listTopics().names().get().stream()
+                                    .filter(t -> pattern.matcher(t).matches())
+                                    .collect(Collectors.toSet()));
+                } else {
+                    topics.addAll(Arrays.asList(metadata.getTopic().split(",")));
+                }
+            }
+
+            if (topics.isEmpty()) {
+                log.warn("No topics found for parallelism infer, returning 1");
+                return 1;
+            }
+
+            int totalPartitions =
+                    adminClient.describeTopics(topics).allTopicNames().get().values().stream()
+                            .mapToInt(desc -> desc.partitions().size())
+                            .sum();
+
+            log.info(
+                    "Inferred parallelism from Kafka partitions: {} (topics: {})",
+                    totalPartitions,
+                    topics);
+            return totalPartitions > 0 ? totalPartitions : 1;
+        } catch (Exception e) {
+            log.warn("Failed to infer parallelism from Kafka partitions, returning 1", e);
+            return 1;
+        }
     }
 }

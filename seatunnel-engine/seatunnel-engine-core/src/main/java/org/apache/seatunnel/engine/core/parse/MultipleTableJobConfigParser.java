@@ -41,6 +41,7 @@ import org.apache.seatunnel.api.sink.SupportMultiTableSink;
 import org.apache.seatunnel.api.sink.SupportSaveMode;
 import org.apache.seatunnel.api.source.SeaTunnelSource;
 import org.apache.seatunnel.api.source.SourceSplit;
+import org.apache.seatunnel.api.source.SupportParallelismInfer;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.catalog.TablePath;
 import org.apache.seatunnel.api.table.factory.ChangeStreamTableSourceCheckpoint;
@@ -55,7 +56,9 @@ import org.apache.seatunnel.common.constants.JobMode;
 import org.apache.seatunnel.common.constants.PluginType;
 import org.apache.seatunnel.common.exception.SeaTunnelRuntimeException;
 import org.apache.seatunnel.core.starter.utils.ConfigBuilder;
+import org.apache.seatunnel.engine.common.config.EngineConfig;
 import org.apache.seatunnel.engine.common.config.JobConfig;
+import org.apache.seatunnel.engine.common.config.ParallelismInferConfig;
 import org.apache.seatunnel.engine.common.config.server.DataSourceConfig;
 import org.apache.seatunnel.engine.common.exception.JobDefineCheckException;
 import org.apache.seatunnel.engine.common.exception.SeaTunnelEngineException;
@@ -134,15 +137,16 @@ public class MultipleTableJobConfigParser {
     private final boolean isStartWithSavePoint;
     private final List<JobPipelineCheckpointData> pipelineCheckpoints;
 
+    private final EngineConfig engineConfig;
+
     private final DataSourceConfig dataSourceConfig;
 
     @VisibleForTesting
     public MultipleTableJobConfigParser(
             String jobDefineFilePath, IdGenerator idGenerator, JobConfig jobConfig) {
-        this(jobDefineFilePath, idGenerator, jobConfig, Collections.emptyList(), false);
+        this(jobDefineFilePath, idGenerator, jobConfig, Collections.emptyList(), false, null);
     }
 
-    @VisibleForTesting
     public MultipleTableJobConfigParser(
             Config seaTunnelJobConfig, IdGenerator idGenerator, JobConfig jobConfig) {
         this(
@@ -152,10 +156,10 @@ public class MultipleTableJobConfigParser {
                 Collections.emptyList(),
                 false,
                 Collections.emptyList(),
+                null);
                 new DataSourceConfig());
     }
 
-    @VisibleForTesting
     public MultipleTableJobConfigParser(
             String jobDefineFilePath,
             IdGenerator idGenerator,
@@ -170,6 +174,25 @@ public class MultipleTableJobConfigParser {
                 commonPluginJars,
                 isStartWithSavePoint,
                 Collections.emptyList(),
+                null);
+    }
+
+    public MultipleTableJobConfigParser(
+            String jobDefineFilePath,
+            IdGenerator idGenerator,
+            JobConfig jobConfig,
+            List<URL> commonPluginJars,
+            boolean isStartWithSavePoint,
+            EngineConfig engineConfig) {
+        this(
+                jobDefineFilePath,
+                null,
+                idGenerator,
+                jobConfig,
+                commonPluginJars,
+                isStartWithSavePoint,
+                Collections.emptyList(),
+                engineConfig);
                 new DataSourceConfig());
     }
 
@@ -181,14 +204,36 @@ public class MultipleTableJobConfigParser {
             List<URL> commonPluginJars,
             boolean isStartWithSavePoint,
             List<JobPipelineCheckpointData> pipelineCheckpoints,
+            EngineConfig engineConfig) {
+        this.idGenerator = idGenerator;
+        this.jobConfig = jobConfig;
+        this.commonPluginJars = commonPluginJars != null ? commonPluginJars : new ArrayList<>();
+        this.isStartWithSavePoint = isStartWithSavePoint;
+        this.seaTunnelJobConfig =
+                MetalakeConfigUtils.getMetalakeConfig(
+                        ConfigBuilder.of(Paths.get(jobDefineFilePath), variables));
+        this.envOptions = ReadonlyConfig.fromConfig(seaTunnelJobConfig.getConfig("env"));
+        this.pipelineCheckpoints = pipelineCheckpoints;
+        this.engineConfig = engineConfig != null ? engineConfig : new EngineConfig();
+        ConfigValidator.of(this.envOptions).validate(new EnvOptionRule().optionRule());
+    }
+
+    public MultipleTableJobConfigParser(
+            Config seaTunnelJobConfig,
+            IdGenerator idGenerator,
+            JobConfig jobConfig,
+            List<URL> commonPluginJars,
+            boolean isStartWithSavePoint,
+            List<JobPipelineCheckpointData> pipelineCheckpoints) {
             DataSourceConfig dataSourceConfig) {
         this(
-                ConfigBuilder.of(Paths.get(jobDefineFilePath), variables),
+                seaTunnelJobConfig,
                 idGenerator,
                 jobConfig,
                 commonPluginJars,
                 isStartWithSavePoint,
                 pipelineCheckpoints,
+                null);
                 dataSourceConfig);
     }
 
@@ -199,11 +244,16 @@ public class MultipleTableJobConfigParser {
             List<URL> commonPluginJars,
             boolean isStartWithSavePoint,
             List<JobPipelineCheckpointData> pipelineCheckpoints,
+            EngineConfig engineConfig) {
             DataSourceConfig dataSourceConfig) {
         this.idGenerator = idGenerator;
         this.jobConfig = jobConfig;
-        this.commonPluginJars = commonPluginJars;
+        this.commonPluginJars = commonPluginJars != null ? commonPluginJars : new ArrayList<>();
         this.isStartWithSavePoint = isStartWithSavePoint;
+        this.seaTunnelJobConfig = seaTunnelJobConfig;
+        this.envOptions = ReadonlyConfig.fromConfig(seaTunnelJobConfig.getConfig("env"));
+        this.pipelineCheckpoints = pipelineCheckpoints;
+        this.engineConfig = engineConfig != null ? engineConfig : new EngineConfig();
         this.seaTunnelJobConfig = handleDataSource(seaTunnelJobConfig, dataSourceConfig);
         this.envOptions = ReadonlyConfig.fromConfig(seaTunnelJobConfig.getConfig("env"));
         this.pipelineCheckpoints = pipelineCheckpoints;
@@ -370,11 +420,53 @@ public class MultipleTableJobConfigParser {
         log.info("add common jar in plugins :{}", commonPluginJars);
     }
 
-    private int getParallelism(ReadonlyConfig config) {
-        return Math.max(
-                1,
-                config.getOptional(EnvCommonOptions.PARALLELISM)
-                        .orElse(envOptions.get(EnvCommonOptions.PARALLELISM)));
+    @VisibleForTesting
+    public int getParallelism(ReadonlyConfig config, SeaTunnelSource<?, ?, ?> source) {
+
+        if (config.getOptional(EnvCommonOptions.PARALLELISM).isPresent()) {
+            return Math.max(1, config.get(EnvCommonOptions.PARALLELISM));
+        }
+        if (envOptions.getOptional(EnvCommonOptions.PARALLELISM).isPresent()) {
+            return Math.max(1, envOptions.get(EnvCommonOptions.PARALLELISM));
+        }
+
+        ParallelismInferConfig parallelismInferConfig = engineConfig.getParallelismInferConfig();
+        boolean inferEnabled =
+                envOptions
+                        .getOptional(EnvCommonOptions.PARALLELISM_INFER_ENABLED)
+                        .orElse(parallelismInferConfig.isEnabled());
+
+        if (inferEnabled && source instanceof SupportParallelismInfer) {
+            try {
+                int inferredParallelism = ((SupportParallelismInfer) source).inferParallelism();
+                if (inferredParallelism > 0) {
+                    int maxParallelism =
+                            envOptions
+                                    .getOptional(EnvCommonOptions.PARALLELISM_INFER_MAX_PARALLELISM)
+                                    .orElse(parallelismInferConfig.getMaxParallelism());
+                    int finalParallelism = Math.min(inferredParallelism, maxParallelism);
+                    log.info(
+                            "Using inferred parallelism {} for source {} (inferred={}, max={})",
+                            finalParallelism,
+                            source.getPluginName(),
+                            inferredParallelism,
+                            maxParallelism);
+                    return finalParallelism;
+                } else {
+                    log.warn(
+                            "Source {} returned invalid inferred parallelism {}, using default",
+                            source.getPluginName(),
+                            inferredParallelism);
+                }
+            } catch (Exception e) {
+                log.warn(
+                        "Failed to infer parallelism for source {}, using default: {}",
+                        source.getPluginName(),
+                        EnvCommonOptions.PARALLELISM.defaultValue(),
+                        e);
+            }
+        }
+        return EnvCommonOptions.PARALLELISM.defaultValue();
     }
 
     public Tuple2<String, List<Tuple2<CatalogTable, Action>>> parseSource(
@@ -383,8 +475,6 @@ public class MultipleTableJobConfigParser {
         final String factoryId = getFactoryId(readonlyConfig);
         final String tableId =
                 readonlyConfig.getOptional(ConnectorCommonOptions.PLUGIN_OUTPUT).orElse(DEFAULT_ID);
-
-        final int parallelism = getParallelism(readonlyConfig);
 
         Function<PluginIdentifier, SeaTunnelSource> fallbackCreateSource =
                 pluginIdentifier -> {
@@ -428,7 +518,7 @@ public class MultipleTableJobConfigParser {
         FactoryUtil.ensureJobModeMatch(jobConfig.getJobContext(), source);
         SourceAction<Object, SourceSplit, Serializable> action =
                 new SourceAction<>(id, actionName, tuple2._1(), factoryUrls, new HashSet<>());
-        action.setParallelism(parallelism);
+        action.setParallelism(getParallelism(readonlyConfig, source));
         for (CatalogTable catalogTable : tuple2._2()) {
             actions.add(new Tuple2<>(catalogTable, action));
         }

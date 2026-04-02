@@ -26,6 +26,7 @@ import org.apache.seatunnel.api.source.SeaTunnelSource;
 import org.apache.seatunnel.api.source.SourceReader;
 import org.apache.seatunnel.api.source.SourceSplitEnumerator;
 import org.apache.seatunnel.api.source.SupportParallelism;
+import org.apache.seatunnel.api.source.SupportParallelismInfer;
 import org.apache.seatunnel.api.table.catalog.CatalogTable;
 import org.apache.seatunnel.api.table.type.SeaTunnelRow;
 import org.apache.seatunnel.common.constants.JobMode;
@@ -35,6 +36,8 @@ import org.apache.seatunnel.connectors.seatunnel.kafka.config.KafkaBaseOptions;
 import org.apache.seatunnel.connectors.seatunnel.kafka.source.fetch.KafkaSourceFetcherManager;
 import org.apache.seatunnel.connectors.seatunnel.kafka.state.KafkaSourceState;
 
+import org.apache.arrow.util.VisibleForTesting;
+import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
@@ -44,7 +47,8 @@ import java.util.stream.Collectors;
 
 public class KafkaSource
         implements SeaTunnelSource<SeaTunnelRow, KafkaSourceSplit, KafkaSourceState>,
-                SupportParallelism {
+                SupportParallelism,
+                SupportParallelismInfer {
 
     private final ReadonlyConfig readonlyConfig;
     private JobContext jobContext;
@@ -127,5 +131,15 @@ public class KafkaSource
     @Override
     public void setJobContext(JobContext jobContext) {
         this.jobContext = jobContext;
+    }
+
+    @Override
+    public int inferParallelism() {
+        return kafkaSourceConfig.getTotalPartitionCount();
+    }
+
+    @VisibleForTesting
+    public Integer getInferParallelism(AdminClient adminClient) {
+        return kafkaSourceConfig.getTotalPartitionCount(adminClient);
     }
 }

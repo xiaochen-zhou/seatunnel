@@ -100,6 +100,8 @@ public class EngineConfig {
     private HttpConfig httpConfig =
             ServerConfigOptions.MasterServerConfigOptions.HTTP.defaultValue();
 
+    private ParallelismInferConfig parallelismInferConfig =
+            ServerConfigOptions.MasterServerConfigOptions.PARALLELISM_INFER.defaultValue();
     private DataSourceConfig dataSourceConfig = ServerConfigOptions.DATASOURCE.defaultValue();
 
     public void setBackupCount(int newBackupCount) {
@@ -176,5 +178,15 @@ public class EngineConfig {
     public EngineConfig setEventReportHttpHeaders(Map<String, String> eventReportHttpHeaders) {
         this.eventReportHttpHeaders = eventReportHttpHeaders;
         return this;
+    }
+
+    public ParallelismInferConfig getParallelismInferConfig() {
+        return parallelismInferConfig;
+    }
+
+    public void setParallelismInferConfig(ParallelismInferConfig parallelismInferConfig) {
+        checkNotNull(parallelismInferConfig);
+        parallelismInferConfig.validate();
+        this.parallelismInferConfig = parallelismInferConfig;
     }
 }
