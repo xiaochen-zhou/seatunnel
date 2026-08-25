@@ -1,0 +1,21 @@
+seatunnel-dist/src/main/assembly/assembly-seatunnel-bin.xml
+  s_e6b7a776d8ff4d::t_f38a2a165c1f74 101-103
+seatunnel-dist/src/main/assembly/assembly-seatunnel-bin-ci.xml
+  s_e6b7a776d8ff4d::t_5ba34ec3b47bf8 99-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1f1635ee0c8ce92a5e7925134128246fed88b9af",
+  "prompts": {},
+  "sessions": {
+    "s_e6b7a776d8ff4d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a6e7ff3-1e8f-4870-9a31-dc54623b7c6a",
+        "model": "glm-5-2-260617"
+      },
+      "human_author": "xiaochen-zhou <598457447@qq.com>"
+    }
+  }
+}
