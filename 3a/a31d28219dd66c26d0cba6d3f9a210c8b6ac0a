@@ -1,0 +1,19 @@
+seatunnel-connectors-v2/connector-paimon/src/test/java/org/apache/seatunnel/connectors/seatunnel/paimon/catalog/PaimonCatalogConfigTest.java
+  s_f9d9733da16f02::t_d96a7b6019a3f5 1-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3aa31d28219dd66c26d0cba6d3f9a210c8b6ac0a",
+  "prompts": {},
+  "sessions": {
+    "s_f9d9733da16f02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f723c59e-3df5-432b-a855-b31f686f7869",
+        "model": "glm-5.3-flash"
+      },
+      "human_author": "xiaochen.zhou <xiaochen.zhou@ly.com>"
+    }
+  }
+}
