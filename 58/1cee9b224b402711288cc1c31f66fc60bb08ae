@@ -1,0 +1,38 @@
+docs/zh/connectors/sink/Paimon.md
+  s_f9d9733da16f02::t_3a179f752956cb 84
+seatunnel-connectors-v2/connector-paimon/src/main/java/org/apache/seatunnel/connectors/seatunnel/paimon/config/PaimonConfig.java
+  s_f9d9733da16f02::t_a0194a81f4df69 74
+  s_f9d9733da16f02::t_ebe320c98888b0 56
+seatunnel-connectors-v2/connector-paimon/src/main/java/org/apache/seatunnel/connectors/seatunnel/paimon/config/PaimonBaseOptions.java
+  s_f9d9733da16f02::t_96a7cfe6b77e00 100-106
+seatunnel-connectors-v2/connector-paimon/src/main/java/org/apache/seatunnel/connectors/seatunnel/paimon/catalog/PaimonCatalogLoader.java
+  s_f9d9733da16f02::t_7fa0e838f06b3e 77
+  s_f9d9733da16f02::t_802febaa34b3d0 84-88
+  s_f9d9733da16f02::t_3f315d67ce63c3 67
+docs/en/connectors/source/Paimon.md
+  s_f9d9733da16f02::t_7b90c971006d61 134-137
+  s_f9d9733da16f02::t_ffe63d32871c45 65
+seatunnel-connectors-v2/connector-paimon/src/main/java/org/apache/seatunnel/connectors/seatunnel/paimon/catalog/PaimonCatalogFactory.java
+  s_f9d9733da16f02::t_f4940377f94ea1 61
+docs/zh/connectors/source/Paimon.md
+  s_f9d9733da16f02::t_ca581eb2be386a 65
+  s_f9d9733da16f02::t_c54ce0036d6d40 139-142
+docs/en/connectors/sink/Paimon.md
+  s_f9d9733da16f02::t_a257d2b7bf6c9a 84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "581cee9b224b402711288cc1c31f66fc60bb08ae",
+  "prompts": {},
+  "sessions": {
+    "s_f9d9733da16f02": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f723c59e-3df5-432b-a855-b31f686f7869",
+        "model": "glm-5.3-flash"
+      },
+      "human_author": "xiaochen.zhou <xiaochen.zhou@ly.com>"
+    }
+  }
+}
