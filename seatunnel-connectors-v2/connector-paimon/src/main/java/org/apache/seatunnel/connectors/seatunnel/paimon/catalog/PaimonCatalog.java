@@ -206,7 +206,26 @@ public class PaimonCatalog implements Catalog, PaimonTable {
         try {
             catalog.createDatabase(tablePath.getDatabaseName(), ignoreIfExists);
         } catch (org.apache.paimon.catalog.Catalog.DatabaseAlreadyExistException e) {
-            throw new DatabaseAlreadyExistException(this.catalogName, tablePath.getDatabaseName());
+            // 老版 paimon HiveCatalog 在 ignoreIfExists=true 时仍可能抛 AlreadyExists，
+            // 库已存在时应忽略，否则 schema_save_mode=CREATE_SCHEMA_WHEN_NOT_EXIST 会失败
+            if (!ignoreIfExists) {
+                throw new DatabaseAlreadyExistException(
+                        this.catalogName, tablePath.getDatabaseName());
+            }
+        } catch (RuntimeException e) {
+            // paimon 1.1.1 HiveCatalog.createDatabaseImpl(HiveCatalog.java:289-290) 没把 hive 的
+            // AlreadyExistsException 转成 DatabaseAlreadyExistException，而是包成
+            // RuntimeException("Failed to create database xxx")，这里按 cause 还原"库已存在"语义
+            if (ignoreIfExists
+                    && e.getCause() != null
+                    && "org.apache.hadoop.hive.metastore.api.AlreadyExistsException"
+                            .equals(e.getCause().getClass().getName())) {
+                log.info(
+                        "Database {} already exists in hive metastore, ignore.",
+                        tablePath.getDatabaseName());
+                return;
+            }
+            throw e;
         }
     }
 
