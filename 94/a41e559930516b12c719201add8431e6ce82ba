@@ -1,0 +1,29 @@
+seatunnel-engine/seatunnel-engine-server/src/main/java/org/apache/seatunnel/engine/server/observability/GetRealtimeMetricsOperation.java
+  s_d97310a69543f6::t_4afc88e3ab2847 27-28,40
+  s_d97310a69543f6::t_eeb4e613572fc0 1-26,29-39,41-118
+seatunnel-engine/seatunnel-engine-server/src/main/java/org/apache/seatunnel/engine/server/serializable/ResourceDataSerializerHook.java
+  s_d97310a69543f6::t_4e73d88015948a 23
+  s_d97310a69543f6::t_fa6a5d61328f61 117-118
+  s_d97310a69543f6::t_537fd53994abf4 69-70
+seatunnel-engine/seatunnel-engine-server/src/main/java/org/apache/seatunnel/engine/server/observability/RealtimeMetricsService.java
+  s_d97310a69543f6::t_81369ac14e28c2 81-86
+seatunnel-engine/seatunnel-engine-server/src/main/java/org/apache/seatunnel/engine/server/rest/servlet/RealtimeMetricsServlet.java
+  s_d97310a69543f6::t_1e5d868f4b842e 21,23,25
+  s_d97310a69543f6::t_1fb3e9ab80b707 53-59,63-67,70-80,83,90-91,98-125,129,135,137-141,143-147,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "94a41e559930516b12c719201add8431e6ce82ba",
+  "prompts": {},
+  "sessions": {
+    "s_d97310a69543f6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c4dbbda2-b9d1-42e5-aa2d-b946d5248d25",
+        "model": "glm-5.3-flash"
+      },
+      "human_author": "xiaochen.zhou <xiaochen.zhou@ly.com>"
+    }
+  }
+}
