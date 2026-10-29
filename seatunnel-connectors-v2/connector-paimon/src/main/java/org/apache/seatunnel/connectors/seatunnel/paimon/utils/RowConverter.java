@@ -399,6 +399,14 @@ public class RowConverter {
             throw CommonError.writeRowErrorWithFieldsCountNotMatch(
                     PaimonBaseOptions.CONNECTOR_IDENTITY, sourceTotalFields, sinkFields.size());
         }
+        // The actual column order of an existing sink table may differ from the upstream row
+        // (e.g. primary key columns placed first by another writing path). Align by field name
+        // before converting, otherwise data would be written into wrong columns by position.
+        if (!isPositionAligned(seaTunnelRowType, sinkFields)) {
+            SeaTunnelRowType alignedType = reorderRowType(seaTunnelRowType, sinkFields);
+            seaTunnelRow = reorderRow(seaTunnelRow, seaTunnelRowType, alignedType);
+            seaTunnelRowType = alignedType;
+        }
         BinaryRow binaryRow = new BinaryRow(sourceTotalFields);
         BinaryWriter binaryWriter = new BinaryRowWriter(binaryRow);
         // Convert SeaTunnel RowKind to Paimon RowKind
@@ -536,6 +544,54 @@ public class RowConverter {
             }
         }
         return binaryRow;
+    }
+
+    /**
+     * Check whether the upstream row fields are already in the same order as the sink table fields.
+     */
+    private static boolean isPositionAligned(SeaTunnelRowType rowType, List<DataField> sinkFields) {
+        for (int i = 0; i < sinkFields.size(); i++) {
+            if (!sinkFields.get(i).name().equals(rowType.getFieldName(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Build an upstream row type whose field order follows the sink table fields, keeping the
+     * original upstream types so values are converted by source type.
+     */
+    private static SeaTunnelRowType reorderRowType(
+            SeaTunnelRowType rowType, List<DataField> sinkFields) {
+        String[] names = new String[sinkFields.size()];
+        SeaTunnelDataType<?>[] types = new SeaTunnelDataType<?>[sinkFields.size()];
+        for (int i = 0; i < sinkFields.size(); i++) {
+            int idx = rowType.indexOf(sinkFields.get(i).name());
+            if (idx < 0) {
+                throw new IllegalArgumentException(
+                        String.format(
+                                "Paimon sink table field '%s' does not exist in the upstream schema [%s]."
+                                        + " Please check the sink table schema and the upstream data.",
+                                sinkFields.get(i).name(),
+                                String.join(", ", rowType.getFieldNames())));
+            }
+            names[i] = rowType.getFieldName(idx);
+            types[i] = rowType.getFieldType(idx);
+        }
+        return new SeaTunnelRowType(names, types);
+    }
+
+    /** Reorder the row values to follow the field order of {@code toType}. */
+    private static SeaTunnelRow reorderRow(
+            SeaTunnelRow row, SeaTunnelRowType fromType, SeaTunnelRowType toType) {
+        Object[] fields = new Object[toType.getTotalFields()];
+        for (int i = 0; i < toType.getTotalFields(); i++) {
+            fields[i] = row.getField(fromType.indexOf(toType.getFieldName(i)));
+        }
+        SeaTunnelRow newRow = new SeaTunnelRow(fields);
+        newRow.setRowKind(row.getRowKind());
+        return newRow;
     }
 
     private static TableSchema extractNestedSchema(DataType nestedType) {
