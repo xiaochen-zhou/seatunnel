@@ -17,6 +17,8 @@
 
 package org.apache.seatunnel.connectors.seatunnel.paimon.catalog;
 
+import org.apache.seatunnel.shade.org.apache.commons.lang3.StringUtils;
+
 import org.apache.seatunnel.api.common.SeaTunnelAPIErrorCode;
 import org.apache.seatunnel.api.configuration.ReadonlyConfig;
 import org.apache.seatunnel.api.table.catalog.Catalog;
@@ -70,12 +72,20 @@ public class PaimonCatalog implements Catalog, PaimonTable {
     private final String catalogName;
     private final ReadonlyConfig readonlyConfig;
     private final PaimonCatalogLoader paimonCatalogLoader;
+    private final String hadoopUserName;
     private org.apache.paimon.catalog.Catalog catalog;
 
     public PaimonCatalog(String catalogName, ReadonlyConfig readonlyConfig) {
         this.readonlyConfig = readonlyConfig;
         this.catalogName = catalogName;
-        this.paimonCatalogLoader = new PaimonCatalogLoader(new PaimonConfig(readonlyConfig));
+        PaimonConfig paimonConfig = new PaimonConfig(readonlyConfig);
+        // 建库 owner：平台经 paimon.hadoop.conf 透传 hadoop_user_name。
+        // hive metastore 建库不带 owner 时 DBS.OWNER_NAME 落空，owner 型授权会把库对非 admin 藏起来
+        this.hadoopUserName =
+                paimonConfig.getHadoopConfProps() == null
+                        ? null
+                        : paimonConfig.getHadoopConfProps().get("hadoop_user_name");
+        this.paimonCatalogLoader = new PaimonCatalogLoader(paimonConfig);
     }
 
     @Override
@@ -204,7 +214,15 @@ public class PaimonCatalog implements Catalog, PaimonTable {
     public void createDatabase(TablePath tablePath, boolean ignoreIfExists)
             throws DatabaseAlreadyExistException, CatalogException {
         try {
-            catalog.createDatabase(tablePath.getDatabaseName(), ignoreIfExists);
+            if (StringUtils.isNotBlank(hadoopUserName)) {
+                // paimon HiveCatalog 只认 properties 里的 "owner" 键（convertToHiveDatabase），
+                // 走无 properties 重载建库 OWNER_NAME 会落空
+                Map<String, String> properties = new HashMap<>();
+                properties.put("owner", hadoopUserName);
+                catalog.createDatabase(tablePath.getDatabaseName(), ignoreIfExists, properties);
+            } else {
+                catalog.createDatabase(tablePath.getDatabaseName(), ignoreIfExists);
+            }
         } catch (org.apache.paimon.catalog.Catalog.DatabaseAlreadyExistException e) {
             throw new DatabaseAlreadyExistException(this.catalogName, tablePath.getDatabaseName());
         }
