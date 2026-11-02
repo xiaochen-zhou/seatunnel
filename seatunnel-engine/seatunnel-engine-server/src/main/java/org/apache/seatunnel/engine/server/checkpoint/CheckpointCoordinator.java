@@ -1477,7 +1477,13 @@ public class CheckpointCoordinator {
         if (checkpoint.getCheckpointType().isSchemaChangeAfterCheckpoint()) {
             completeSchemaChangeAfterCheckpoint(checkpoint);
         }
+        // Tasks that have already been closed because their source is idle no longer take part in
+        // checkpoint processing (CheckpointBarrier#prepareClose skips them). Sending them
+        // CheckpointFinishedOperation fails with "task not found" and makes notifyCompleted throw,
+        // which records an extra CHECKPOINT_NOTIFY_COMPLETE_FAILED entry for a checkpoint that has
+        // actually been completed, and fails the whole job.
         return plan.getPipelineSubtasks().stream()
+                .filter(taskLocation -> !closedIdleTask.contains(taskLocation))
                 .map(
                         taskLocation ->
                                 new CheckpointFinishedOperation(
@@ -1488,7 +1494,9 @@ public class CheckpointCoordinator {
 
     public InvocationFuture<?>[] notifyCheckpointEnd(CompletedCheckpoint checkpoint) {
         if (checkpoint.getCheckpointType().isSchemaChangeCheckpoint()) {
+            // Skip the same closed idle tasks as notifyCheckpointCompleted.
             return plan.getPipelineSubtasks().stream()
+                    .filter(taskLocation -> !closedIdleTask.contains(taskLocation))
                     .map(
                             taskLocation ->
                                     new CheckpointEndOperation(
