@@ -58,6 +58,44 @@ public class EnvCommonOptions {
                     .defaultValue(3)
                     .withDescription("The retry interval seconds of this job");
 
+    public static Option<String> JOB_RETRY_STRATEGY =
+            Options.key("job.retry.strategy")
+                    .stringType()
+                    .defaultValue("fixed-delay")
+                    .withDescription(
+                            "The pipeline restart strategy when this job fails, only works in the Zeta engine. "
+                                    + "Supported strategies: none, fixed-delay, failure-rate. "
+                                    + "fixed-delay retries at most job.retry.times times for the whole pipeline lifetime; "
+                                    + "failure-rate retries while the number of recent failures is below "
+                                    + "job.retry.failure-rate.max-failures-per-interval.");
+
+    public static Option<Integer> JOB_RETRY_FAILURE_RATE_MAX_FAILURES =
+            Options.key("job.retry.failure-rate.max-failures-per-interval")
+                    .intType()
+                    .defaultValue(3)
+                    .withDescription(
+                            "The maximum number of pipeline failures allowed within "
+                                    + "job.retry.failure-rate.interval.seconds before the job is marked as failed. "
+                                    + "Only used when job.retry.strategy is failure-rate.");
+
+    public static Option<Long> JOB_RETRY_FAILURE_RATE_INTERVAL_SECONDS =
+            Options.key("job.retry.failure-rate.interval.seconds")
+                    .longType()
+                    .defaultValue(600L)
+                    .withDescription(
+                            "The sliding window (in seconds) used by the failure-rate strategy. "
+                                    + "Failures older than this window no longer count against the retry budget, "
+                                    + "so a pipeline that stays healthy for this long gets a fresh budget. "
+                                    + "Only used when job.retry.strategy is failure-rate.");
+
+    public static Option<Long> JOB_RETRY_FAILURE_RATE_DELAY_SECONDS =
+            Options.key("job.retry.failure-rate.delay.seconds")
+                    .longType()
+                    .defaultValue(3L)
+                    .withDescription(
+                            "The delay (in seconds) between two restart attempts when job.retry.strategy "
+                                    + "is failure-rate.");
+
     public static Option<Long> CHECKPOINT_INTERVAL =
             Options.key("checkpoint.interval")
                     .longType()
