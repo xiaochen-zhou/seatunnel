@@ -712,7 +712,7 @@ for every running job would cost one more round trip to the master per job.
 | pipelines[].pipelineId | Pipeline id inside the job |
 | pipelines[].pipelineStatus | Current pipeline state |
 | pipelines[].restoreCount | How many times this pipeline has been restored since the job was submitted. A value that keeps growing while `jobStatus` stays `RUNNING` is a crash loop |
-| pipelines[].maxRestoreCount | Restore limit of this pipeline, from the `job.retry.times` env option |
+| pipelines[].maxRestoreCount | Restore budget of this pipeline: `job.retry.times` for the `fixed-delay` strategy, `job.retry.failure-rate.max-failures-per-interval` for the `failure-rate` strategy, and `0` for the `none` strategy |
 | pipelines[].stateTimestamps | Epoch millis when the pipeline entered each state. After a restore, the timestamps of the new attempt overwrite the previous ones |
 | totalPipelineRestoreCount | Sum of `restoreCount` over all pipelines of the job |
 

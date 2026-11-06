@@ -43,13 +43,44 @@
 
 ### job.retry.times
 
-用于控制作业失败时的默认重试次数。默认值为3，并且仅适用于Zeta引擎。
+用于默认的 `fixed-delay` 策略控制作业失败时的重试次数。默认值为3，并且仅适用于Zeta引擎。
 
-该计数器会在整个 pipeline 生命周期内持续累加，中途一次成功恢复并不会将其重置。例如设置 `job.retry.times = 5` 时：如果 pipeline 失败后经过重试，在第 3 次尝试时恢复成功，之后又再次失败，此时只剩下 2 次重试机会（第 4、5 次尝试），用完后作业会被标记为永久失败，重试额度不会恢复到 5 次。唯一的例外是 Zeta 集群发生 active master 切换时，pipeline 执行计划（以及其重试计数器）会被重新构建。
+该计数器会在整个 pipeline 生命周期内持续累加，中途一次成功恢复并不会将其重置。例如设置 `job.retry.times = 5` 时：如果 pipeline 失败后经过重试，在第 3 次尝试时恢复成功，之后又再次失败，此时只剩下 2 次重试机会（第 4、5 次尝试），用完后作业会被标记为永久失败，重试额度不会恢复到 5 次。唯一的例外是 Zeta 集群发生 active master 切换时，pipeline 执行计划（以及其重试计数器）会被重新构建。如果希望作业稳定运行一段时间后重新获得重试额度，请使用 `failure-rate` 策略。
 
 ### job.retry.interval.seconds
 
-用于控制作业失败时的默认重试间隔。默认值为3秒，并且仅适用于Zeta引擎。
+用于默认的 `fixed-delay` 策略控制作业失败时的重试间隔。默认值为3秒，并且仅适用于Zeta引擎。
+
+### job.retry.strategy
+
+作业失败时 pipeline 的重启策略。默认值为 `fixed-delay`，并且仅适用于 Zeta 引擎。
+
+- `fixed-delay`：整个 pipeline 生命周期内最多重试 `job.retry.times` 次，每次重试前等待 `job.retry.interval.seconds` 秒。
+- `failure-rate`：当 `job.retry.failure-rate.interval.seconds` 滑动窗口内的失败次数小于 `job.retry.failure-rate.max-failures-per-interval` 时允许重试。pipeline 稳定运行满一个窗口后会重新获得重试额度，因此长期运行、偶尔恢复的作业不会因为历史失败不断累积而被永久终止。
+- `none`：失败后不重启 pipeline。
+
+例如，只有 10 分钟内失败 5 次才判定作业失败（每次重启前等待 5 秒）：
+
+```hocon
+env {
+  job.retry.strategy = "failure-rate"
+  job.retry.failure-rate.max-failures-per-interval = 5
+  job.retry.failure-rate.interval.seconds = 600
+  job.retry.failure-rate.delay.seconds = 5
+}
+```
+
+### job.retry.failure-rate.max-failures-per-interval
+
+`failure-rate` 策略在 `job.retry.failure-rate.interval.seconds` 窗口内允许的最大失败次数，超过后作业被标记为失败。默认值为 3，仅 `failure-rate` 策略使用。
+
+### job.retry.failure-rate.interval.seconds
+
+`failure-rate` 策略的滑动窗口长度（秒）。早于该窗口的失败不再占用重试额度。默认值为 600 秒，仅 `failure-rate` 策略使用。
+
+### job.retry.failure-rate.delay.seconds
+
+`failure-rate` 策略每次重启前的等待时间（秒）。默认值为 3 秒，仅 `failure-rate` 策略使用。
 
 ### savemode.execute.location
 

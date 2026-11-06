@@ -20,7 +20,6 @@ package org.apache.seatunnel.engine.server.dag.physical;
 import org.apache.seatunnel.shade.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.seatunnel.api.common.multitable.MultiTableFailureHelper;
-import org.apache.seatunnel.api.options.EnvCommonOptions;
 import org.apache.seatunnel.common.utils.ExceptionUtils;
 import org.apache.seatunnel.common.utils.RetryUtils;
 import org.apache.seatunnel.engine.common.Constant;
@@ -32,6 +31,8 @@ import org.apache.seatunnel.engine.core.job.PipelineExecutionState;
 import org.apache.seatunnel.engine.core.job.PipelineStatus;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointCoordinatorState;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointCoordinatorStatus;
+import org.apache.seatunnel.engine.server.dag.physical.restart.PipelineRestartStrategy;
+import org.apache.seatunnel.engine.server.dag.physical.restart.PipelineRestartStrategyFactory;
 import org.apache.seatunnel.engine.server.execution.ExecutionState;
 import org.apache.seatunnel.engine.server.execution.TaskExecutionState;
 import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
@@ -53,10 +54,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Slf4j
 public class SubPlan {
 
-    /** The max num pipeline can restore. */
-    private final int pipelineMaxRestoreNum;
-
-    private final int pipelineRestoreIntervalSeconds;
+    /** The strategy that decides whether and when this pipeline can be restored. */
+    private final PipelineRestartStrategy restartStrategy;
 
     private final List<PhysicalVertex> physicalVertexList;
 
@@ -100,8 +99,6 @@ public class SubPlan {
 
     private PassiveCompletableFuture<Void> reSchedulerPipelineFuture;
 
-    private AtomicInteger pipelineRestoreNum;
-
     private final Object restoreLock = new Object();
 
     private volatile PipelineStatus currPipelineStatus;
@@ -137,27 +134,11 @@ public class SubPlan {
         this.pipelineFuture = new CompletableFuture<>();
         this.physicalVertexList = physicalVertexList;
         this.coordinatorVertexList = coordinatorVertexList;
-        pipelineRestoreNum = new AtomicInteger();
-        pipelineMaxRestoreNum =
-                Integer.parseInt(
-                        jobImmutableInformation
-                                .getJobConfig()
-                                .getEnvOptions()
-                                .computeIfAbsent(
-                                        EnvCommonOptions.JOB_RETRY_TIMES.key(),
-                                        key -> EnvCommonOptions.JOB_RETRY_TIMES.defaultValue())
-                                .toString());
-        pipelineRestoreIntervalSeconds =
-                Integer.parseInt(
-                        jobImmutableInformation
-                                .getJobConfig()
-                                .getEnvOptions()
-                                .computeIfAbsent(
-                                        EnvCommonOptions.JOB_RETRY_INTERVAL_SECONDS.key(),
-                                        key ->
-                                                EnvCommonOptions.JOB_RETRY_INTERVAL_SECONDS
-                                                        .defaultValue())
-                                .toString());
+        this.restartStrategy =
+                PipelineRestartStrategyFactory.create(
+                        jobImmutableInformation.getJobConfig() == null
+                                ? null
+                                : jobImmutableInformation.getJobConfig().getEnvOptions());
         Long[] stateTimestamps = new Long[PipelineStatus.values().length];
         if (runningJobStateTimestampsIMap.get(pipelineLocation) == null) {
             stateTimestamps[PipelineStatus.INITIALIZING.ordinal()] = initializationTimestamp;
@@ -391,7 +372,7 @@ public class SubPlan {
     }
 
     public boolean canRestorePipeline() {
-        return jobMaster.isNeedRestore() && getPipelineRestoreNum() < pipelineMaxRestoreNum;
+        return jobMaster.isNeedRestore() && restartStrategy.canRestart();
     }
 
     public synchronized void updatePipelineState(@NonNull PipelineStatus targetState) {
@@ -558,20 +539,20 @@ public class SubPlan {
     private boolean prepareRestorePipeline() {
         synchronized (restoreLock) {
             try {
-                pipelineRestoreNum.getAndIncrement();
+                restartStrategy.notifyRestart();
                 log.info(
                         String.format(
                                 "Restore time %s, pipeline %s",
-                                pipelineRestoreNum + "", pipelineFullName));
+                                restartStrategy.getRestartCount(), pipelineFullName));
                 jobMaster.clearPipelineMetricsForRestore(getPipelineLocation());
                 reset();
                 jobMaster.getCheckpointManager().reportedPipelineRunning(pipelineId, false);
                 jobMaster.getPhysicalPlan().addPipelineEndCallback(this);
                 log.info(
                         "Wait {}s and then restore the pipeline {}",
-                        pipelineRestoreIntervalSeconds,
+                        restartStrategy.getDelaySeconds(),
                         getPipelineFullName());
-                Thread.sleep(pipelineRestoreIntervalSeconds * 1000);
+                Thread.sleep(restartStrategy.getDelaySeconds() * 1000);
                 return true;
             } catch (Throwable e) {
                 if (this.currPipelineStatus.isEndState()) {
@@ -718,7 +699,15 @@ public class SubPlan {
     }
 
     public int getPipelineRestoreNum() {
-        return pipelineRestoreNum.get();
+        return restartStrategy.getRestartCount();
+    }
+
+    public int getPipelineMaxRestoreNum() {
+        return restartStrategy.getMaxRestartCount();
+    }
+
+    public String getRestartStrategyName() {
+        return restartStrategy.getName();
     }
 
     public void handleCheckpointError() {

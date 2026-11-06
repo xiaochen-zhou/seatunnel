@@ -71,6 +71,24 @@ public class JobClientJobProxyIT extends SeaTunnelEngineContainer {
     }
 
     @Test
+    public void testJobRetryFailureRateStrategy() throws IOException, InterruptedException {
+        Container.ExecResult execResult =
+                executeJob(
+                        server,
+                        "/retry-times/stream_fake_to_inmemory_with_error_failure_rate.conf");
+        Assertions.assertNotEquals(0, execResult.getExitCode());
+        String logs = server.getLogs();
+        Assertions.assertTrue(
+                logs.contains(
+                        "Restore time 1, pipeline Job stream_fake_to_inmemory_with_error_failure_rate.conf"),
+                logs);
+        Assertions.assertFalse(
+                logs.contains(
+                        "Restore time 2, pipeline Job stream_fake_to_inmemory_with_error_failure_rate.conf"),
+                logs);
+    }
+
+    @Test
     public void testNoDuplicatedReleaseSlot() throws IOException, InterruptedException {
         Container.ExecResult execResult =
                 executeJob(server, "/savemode/fake_to_inmemory_savemode.conf");

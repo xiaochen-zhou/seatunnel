@@ -43,13 +43,44 @@ For more details, you can refer to the documentation [Config Encryption Decrypti
 
 ### job.retry.times
 
-Used to control the default retry times when a job fails. The default value is 3, and it only works in the Zeta engine.
+Used by the default `fixed-delay` strategy to control the number of retries when a job fails. The default value is 3, and it only works in the Zeta engine.
 
-This counter accumulates for the life of the pipeline; an intermediate successful recovery does not reset it. For example, with `job.retry.times = 5`: if the pipeline fails, retries, and recovers on attempt #3, then later fails again, only 2 retries remain (attempts #4 and #5) before the job is marked permanently failed — the budget does not refresh back to 5. The one exception is an active-master failover in a Zeta cluster, which rebuilds the pipeline execution plan (and its retry counter) from scratch.
+This counter accumulates for the life of the pipeline; an intermediate successful recovery does not reset it. For example, with `job.retry.times = 5`: if the pipeline fails, retries, and recovers on attempt #3, then later fails again, only 2 retries remain (attempts #4 and #5) before the job is marked permanently failed — the budget does not refresh back to 5. The one exception is an active-master failover in a Zeta cluster, which rebuilds the pipeline execution plan (and its retry counter) from scratch. Use the `failure-rate` strategy if the retry budget should be refreshed after a period of stability.
 
 ### job.retry.interval.seconds
 
-Used to control the default retry interval when a job fails. The default value is 3 seconds, and it only works in the Zeta engine.
+Used by the default `fixed-delay` strategy to control the retry interval when a job fails. The default value is 3 seconds, and it only works in the Zeta engine.
+
+### job.retry.strategy
+
+The pipeline restart strategy used when a job fails. The default value is `fixed-delay`, and it only works in the Zeta engine.
+
+- `fixed-delay`: retries at most `job.retry.times` times for the whole lifetime of the pipeline, waiting `job.retry.interval.seconds` before each attempt.
+- `failure-rate`: retries while the number of failures inside the rolling window `job.retry.failure-rate.interval.seconds` is below `job.retry.failure-rate.max-failures-per-interval`. A pipeline that stays healthy for a whole window gets a fresh retry budget, so a long-running job that occasionally recovers is not eventually killed by accumulated failures.
+- `none`: never restarts a failed pipeline.
+
+For example, to fail a job only after 5 failures within 10 minutes (waiting 5 seconds before each restart):
+
+```hocon
+env {
+  job.retry.strategy = "failure-rate"
+  job.retry.failure-rate.max-failures-per-interval = 5
+  job.retry.failure-rate.interval.seconds = 600
+  job.retry.failure-rate.delay.seconds = 5
+}
+```
+
+### job.retry.failure-rate.max-failures-per-interval
+
+The maximum number of pipeline failures allowed within `job.retry.failure-rate.interval.seconds` before the job is marked as failed. The default value is 3, and it is only used by the `failure-rate` strategy.
+
+### job.retry.failure-rate.interval.seconds
+
+The length of the rolling window used by the `failure-rate` strategy. Failures older than this window no longer count against the retry budget. The default value is 600 seconds, and it is only used by the `failure-rate` strategy.
+
+### job.retry.failure-rate.delay.seconds
+
+The delay in seconds before each restart attempt of the `failure-rate` strategy. The default value is 3 seconds, and it is only used by the `failure-rate` strategy.
 
 ### savemode.execute.location
 

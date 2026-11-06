@@ -700,7 +700,7 @@ seatunnel:
 | pipelines[].pipelineId | Job 内的 Pipeline id |
 | pipelines[].pipelineStatus | Pipeline 当前状态 |
 | pipelines[].restoreCount | 自 Job 提交以来该 Pipeline 被恢复（重启）的次数。若 `jobStatus` 一直是 `RUNNING` 而该值不断增长，说明处于崩溃重启循环中 |
-| pipelines[].maxRestoreCount | 该 Pipeline 的恢复次数上限，来自 `job.retry.times` env 配置 |
+| pipelines[].maxRestoreCount | 该 Pipeline 的恢复额度：`fixed-delay` 策略下为 `job.retry.times`，`failure-rate` 策略下为 `job.retry.failure-rate.max-failures-per-interval`，`none` 策略下为 `0` |
 | pipelines[].stateTimestamps | Pipeline 进入各状态的时间戳（毫秒）。发生恢复后，新一轮的时间戳会覆盖上一轮 |
 | totalPipelineRestoreCount | Job 下所有 Pipeline 的 `restoreCount` 之和 |
 
