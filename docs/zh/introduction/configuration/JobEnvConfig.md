@@ -29,6 +29,10 @@
 
 检查点的超时时间(毫秒)。如果检查点在超时之前没有完成，作业将失败。在Zeta中，默认值为30000毫秒。
 
+### checkpoint.tolerable-failed-checkpoints
+
+作业允许连续失败的 checkpoint 次数，仅 Zeta 引擎支持。`0`（默认值）表示第一次 checkpoint 失败就失败作业；设置上限后，未超限的失败只会中止当前进行中的 checkpoint，作业继续运行，成功一次 checkpoint 后计数清零。`env` 中不设置时使用 `seatunnel.yaml` 的集群默认值（`engine.checkpoint.tolerable-failed-checkpoints`）。
+
 ### parallelism
 
 该参数配置source和sink的并行度。

@@ -64,6 +64,9 @@ public class YamlSeaTunnelConfigParserTest {
                 64, config.getEngineConfig().getCheckpointConfig().getMonitorHistorySize());
 
         Assertions.assertEquals(
+                3, config.getEngineConfig().getCheckpointConfig().getTolerableFailedCheckpoints());
+
+        Assertions.assertEquals(
                 "hdfs", config.getEngineConfig().getCheckpointConfig().getStorage().getStorage());
 
         Assertions.assertEquals(
@@ -168,6 +171,23 @@ public class YamlSeaTunnelConfigParserTest {
                 config.getEngineConfig().getCheckpointConfig().getMonitorHistorySize());
         Assertions.assertEquals(
                 32, config.getEngineConfig().getCheckpointConfig().getMonitorHistorySize());
+    }
+
+    @Test
+    public void testCheckpointTolerableFailedCheckpoints() {
+        CheckpointConfig checkpointConfig = new CheckpointConfig();
+        Assertions.assertEquals(
+                ServerConfigOptions.MasterServerConfigOptions.TOLERABLE_FAILED_CHECKPOINTS
+                        .defaultValue(),
+                checkpointConfig.getTolerableFailedCheckpoints());
+
+        Assertions.assertThrows(
+                IllegalArgumentException.class,
+                () -> checkpointConfig.setTolerableFailedCheckpoints(-1));
+        checkpointConfig.setTolerableFailedCheckpoints(0);
+        Assertions.assertEquals(0, checkpointConfig.getTolerableFailedCheckpoints());
+        checkpointConfig.setTolerableFailedCheckpoints(5);
+        Assertions.assertEquals(5, checkpointConfig.getTolerableFailedCheckpoints());
     }
 
     @Test

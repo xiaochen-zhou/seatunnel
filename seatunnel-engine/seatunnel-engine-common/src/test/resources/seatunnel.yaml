@@ -29,6 +29,7 @@ seatunnel:
             interval: 6000
             timeout: 7000
             monitor-history-size: 64
+            tolerable-failed-checkpoints: 3
             storage:
                 type: hdfs
                 max-retained: 3

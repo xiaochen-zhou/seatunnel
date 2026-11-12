@@ -97,6 +97,10 @@ seatunnel:
 
 监控为 `/jobs/checkpoints/{jobId}` REST 接口按 pipeline 保留的 checkpoint 历史条数，取值 1 到 4096，默认 32。超过 256 的值仍然可用，但 master 启动时会打印一条警告——因为下面提到的开销是每次 checkpoint 事件都要付的。已完成和失败的 checkpoint 共用这个窗口。
 
+**tolerable-failed-checkpoints**
+
+作业允许连续失败的 checkpoint 次数，默认 0（即一旦 checkpoint 失败作业就失败，与历史行为一致）。未超过该上限时，协调器只中止当前进行中的 checkpoint，作业继续运行；一旦有 checkpoint 成功，计数立即清零。也可以在作业 `env` 中通过 `checkpoint.tolerable-failed-checkpoints` 单独设置。
+
 它是**条数**而不是时长，因此覆盖多长时间取决于每个作业自己的 `checkpoint.interval`，而本选项是集群级的：按默认 300000ms 的间隔，32 条约覆盖 2.5 小时；若间隔为 10000ms，则只覆盖约 5 分钟。如果集群上有间隔很短的作业，并且希望拿作业和更长一段自身历史做对比，应调大该值。
 
 历史保存在集群级的 checkpoint overview map 中，每次 checkpoint 事件都会重写整条记录，因此窗口越大，除堆内存外还会增加 master 的 CPU、网络与副本复制开销。该值只在 master 启动时读取一次，修改后需要重启。
@@ -115,6 +119,7 @@ seatunnel:
             timeout: 10000
             min-pause: 5000
             monitor-history-size: 32
+            tolerable-failed-checkpoints: 0
 ```
 
 **checkpoint storage**

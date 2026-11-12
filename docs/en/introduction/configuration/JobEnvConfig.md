@@ -29,6 +29,10 @@ In `STREAMING` mode, checkpoints is required, if you do not set it, it will be o
 
 The timeout (in milliseconds) for a checkpoint. If the checkpoint is not completed before the timeout, the job will fail. In Zeta, the default value is 30000 milliseconds.
 
+### checkpoint.tolerable-failed-checkpoints
+
+How many consecutive checkpoint failures the job may tolerate before failing, only supported by the Zeta engine. `0` (the default) fails the job on the first checkpoint failure. When the limit is set, failures up to the limit only abort the in-flight checkpoints and the job keeps running, and the counter is reset after a successful checkpoint. When it is not set in `env`, the cluster default from `seatunnel.yaml` (`engine.checkpoint.tolerable-failed-checkpoints`) is used.
+
 ### parallelism
 
 This parameter configures the parallelism of source and sink.
