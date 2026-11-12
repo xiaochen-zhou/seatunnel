@@ -114,7 +114,7 @@ final class InformerPodWatch implements KubernetesWatch {
                         0L,
                         (type, failure) -> handleWatchFailure(failure));
         informer.addEventHandler(
-                new ResourceEventHandler<>() {
+                new ResourceEventHandler<V1Pod>() {
                     @Override
                     public void onAdd(V1Pod pod) {
                         deliver(() -> callback.onPodAdded(new KubernetesPod(pod)));
@@ -177,7 +177,7 @@ final class InformerPodWatch implements KubernetesWatch {
         // A watch response stays open until the API server ends it, so it must not inherit the
         // bounded read timeout of the ordinary API client.
         client.setReadTimeout(0);
-        return new ListerWatcher<>() {
+        return new ListerWatcher<V1Pod, V1PodList>() {
             @Override
             public V1PodList list(CallGeneratorParams params) throws ApiException {
                 return (V1PodList)

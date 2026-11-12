@@ -104,30 +104,7 @@ if ! command -v "${APPLICATION_JAVA}" >/dev/null 2>&1; then
     exit 1
 fi
 
-# Fail fast with an actionable message on unsupported JDK versions.
-JAVA_MAJOR_VERSION=$(
-    "${APPLICATION_JAVA}" -version 2>&1 |
-        awk -F '[".]' '/version/ { print ($2 == "1") ? $3 : $2; exit }'
-)
 
-if [[ -n "${JAVA_MAJOR_VERSION}" && "${JAVA_MAJOR_VERSION}" -lt 11 ]]; then
-    echo "Error: SeaTunnel requires Java 11 or newer, but Java ${JAVA_MAJOR_VERSION} was detected." >&2
-    echo "Point JAVA_HOME or PATH at a Java 11+ JDK." >&2
-    exit 1
-fi
-
-for module_flag in \
-  "--add-opens=java.base/java.lang=ALL-UNNAMED" \
-  "--add-opens=java.base/java.net=ALL-UNNAMED" \
-  "--add-opens=java.base/java.nio=ALL-UNNAMED" \
-  "--add-opens=java.base/java.util=ALL-UNNAMED" \
-  "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED" \
-  "--add-exports=java.security.jgss/sun.security.krb5=ALL-UNNAMED"; do
-  case " ${JAVA_OPTS} " in
-    *" ${module_flag} "*) ;;
-    *) JAVA_OPTS="${JAVA_OPTS} ${module_flag}" ;;
-  esac
-done
 
 # Preserve user-supplied JVM options and pass application arguments unchanged.
 exec "${APPLICATION_JAVA}" ${JAVA_OPTS} \
