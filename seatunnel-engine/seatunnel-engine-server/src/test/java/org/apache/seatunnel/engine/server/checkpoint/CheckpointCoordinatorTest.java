@@ -1005,8 +1005,16 @@ public class CheckpointCoordinatorTest
      * mocked, so the test never touches Hazelcast / Hadoop I/O.
      */
     private CheckpointCoordinator buildMinimalCoordinator(ExecutorService executorService) {
+        return buildMinimalCoordinator(executorService, 0, null);
+    }
+
+    private CheckpointCoordinator buildMinimalCoordinator(
+            ExecutorService executorService,
+            int tolerableFailedCheckpoints,
+            CheckpointMonitorService checkpointMonitorService) {
         CheckpointConfig checkpointConfig = new CheckpointConfig();
         checkpointConfig.setStorage(new CheckpointStorageConfig());
+        checkpointConfig.setTolerableFailedCheckpoints(tolerableFailedCheckpoints);
 
         TaskLocation taskLocation = new TaskLocation(new TaskGroupLocation(1L, 1, 1), 1, 1);
         CheckpointPlan plan =
@@ -1033,7 +1041,7 @@ public class CheckpointCoordinatorTest
                 executorService,
                 mockIMap,
                 false,
-                null);
+                checkpointMonitorService);
     }
 
     @Test
@@ -1485,6 +1493,120 @@ public class CheckpointCoordinatorTest
                 expected,
                 delivered,
                 scenario + ": every checkpointed subtask state must be restored exactly once");
+    }
+
+    // ------------------------------------------------------------------
+    // Tolerable checkpoint failures
+    // ------------------------------------------------------------------
+
+    @Test
+    void testToleratedCheckpointFailureOnlyAbortsTheInFlightCheckpoint() {
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            CheckpointMonitorService monitorService = Mockito.mock(CheckpointMonitorService.class);
+            CheckpointCoordinator coordinator =
+                    buildMinimalCoordinator(executorService, 2, monitorService);
+            PendingCheckpoint pendingCheckpoint = Mockito.mock(PendingCheckpoint.class);
+            Mockito.when(pendingCheckpoint.getCheckpointId()).thenReturn(1L);
+            Mockito.when(pendingCheckpoint.getCheckpointType())
+                    .thenReturn(CheckpointType.CHECKPOINT_TYPE);
+            Map<Long, PendingCheckpoint> pendingCheckpoints = pendingCheckpointsOf(coordinator);
+            pendingCheckpoints.put(1L, pendingCheckpoint);
+
+            coordinator.handleTolerableCheckpointError(
+                    "checkpoint expired before completing",
+                    null,
+                    CheckpointCloseReason.CHECKPOINT_EXPIRED);
+
+            Assertions.assertEquals(1, coordinator.getConsecutiveFailedCounter());
+            Assertions.assertFalse(
+                    coordinator.waitCheckpointCoordinatorComplete().isDone(),
+                    "a tolerated failure must not fail the coordinator");
+            Assertions.assertTrue(
+                    pendingCheckpoints.isEmpty(), "the in-flight checkpoint must be aborted");
+            Mockito.verify(pendingCheckpoint)
+                    .abortCheckpointTolerated(CheckpointCloseReason.CHECKPOINT_EXPIRED);
+            Mockito.verify(monitorService)
+                    .onCheckpointFailed(
+                            Mockito.eq(1L),
+                            Mockito.eq(1),
+                            Mockito.eq(1L),
+                            Mockito.eq(CheckpointType.CHECKPOINT_TYPE),
+                            Mockito.eq(CheckpointCloseReason.CHECKPOINT_EXPIRED),
+                            Mockito.isNull(),
+                            Mockito.anyLong());
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    @Test
+    void testTolerableCheckpointFailuresExceedingLimitFailsTheCoordinator() {
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            CheckpointCoordinator coordinator =
+                    buildMinimalCoordinator(
+                            executorService, 1, Mockito.mock(CheckpointMonitorService.class));
+
+            coordinator.handleTolerableCheckpointError(
+                    "first timeout", null, CheckpointCloseReason.CHECKPOINT_EXPIRED);
+            Assertions.assertEquals(1, coordinator.getConsecutiveFailedCounter());
+            Assertions.assertFalse(coordinator.waitCheckpointCoordinatorComplete().isDone());
+
+            coordinator.handleTolerableCheckpointError(
+                    "second timeout", null, CheckpointCloseReason.CHECKPOINT_EXPIRED);
+            Assertions.assertEquals(2, coordinator.getConsecutiveFailedCounter());
+            Assertions.assertTrue(
+                    coordinator.waitCheckpointCoordinatorComplete().isDone(),
+                    "exceeding the tolerable limit must fail the coordinator");
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    @Test
+    void testCheckpointFailureFailsImmediatelyWhenToleranceIsDisabled() {
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            // default is 0 -> legacy behaviour: the first failure fails the coordinator
+            CheckpointCoordinator coordinator = buildMinimalCoordinator(executorService);
+
+            coordinator.handleTolerableCheckpointError(
+                    "checkpoint expired", null, CheckpointCloseReason.CHECKPOINT_EXPIRED);
+
+            Assertions.assertEquals(0, coordinator.getConsecutiveFailedCounter());
+            Assertions.assertTrue(coordinator.waitCheckpointCoordinatorComplete().isDone());
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    @Test
+    void testNonCheckpointAttemptFailureIsNotTolerated() {
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            CheckpointCoordinator coordinator =
+                    buildMinimalCoordinator(
+                            executorService, 5, Mockito.mock(CheckpointMonitorService.class));
+
+            // notify-completion failures must stay fatal, they are not retried as checkpoints.
+            coordinator.handleCoordinatorError(
+                    "notify checkpoint completed failed",
+                    new RuntimeException("notify failed"),
+                    CheckpointCloseReason.CHECKPOINT_NOTIFY_COMPLETE_FAILED);
+
+            Assertions.assertTrue(coordinator.waitCheckpointCoordinatorComplete().isDone());
+            Assertions.assertEquals(0, coordinator.getConsecutiveFailedCounter());
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<Long, PendingCheckpoint> pendingCheckpointsOf(CheckpointCoordinator coordinator) {
+        return (Map<Long, PendingCheckpoint>)
+                ReflectionUtils.getField(coordinator, "pendingCheckpoints")
+                        .orElseThrow(() -> new IllegalStateException("pendingCheckpoints missing"));
     }
 }
 

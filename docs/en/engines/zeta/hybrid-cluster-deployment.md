@@ -97,6 +97,10 @@ The minimum pause (in milliseconds) between consecutive checkpoints. This ensure
 
 How many checkpoint history entries the monitor keeps per pipeline for the `/jobs/checkpoints/{jobId}` REST endpoint, between 1 and 4096, defaulting to 32. Values above 256 are accepted but log a warning at master startup, since the cost below is paid on every checkpoint event. Completed and failed checkpoints share the window.
 
+**tolerable-failed-checkpoints**
+
+How many consecutive checkpoint failures a job may tolerate before it fails, defaulting to 0 (the job fails on the first checkpoint failure, which is the historical behaviour). While the limit is not exceeded, the coordinator aborts the in-flight checkpoints and keeps the job running; the counter is reset as soon as a checkpoint completes. The same limit can be set per job with the `checkpoint.tolerable-failed-checkpoints` key in the job `env`.
+
 This is a count rather than a duration, so how much time it covers depends on each job's own `checkpoint.interval` while this option is cluster-wide: 32 entries cover about 2.5 hours at the default interval of 300000ms, but only about 5 minutes at an interval of 10000ms. Raise it if you run jobs with short intervals and want to compare a job against a longer stretch of its own past.
 
 The history is stored in the cluster-wide checkpoint overview map, and every checkpoint event rewrites that whole entry, so a larger window costs master CPU, network and backup traffic as well as heap. The value is read once at master startup, so changing it requires a restart.
@@ -115,6 +119,7 @@ seatunnel:
             timeout: 10000
             min-pause: 5000
             monitor-history-size: 32
+            tolerable-failed-checkpoints: 0
 
 ```
 

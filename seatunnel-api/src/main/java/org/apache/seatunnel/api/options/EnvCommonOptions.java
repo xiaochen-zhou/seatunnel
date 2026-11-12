@@ -139,6 +139,15 @@ public class EnvCommonOptions {
                             "The minimum pause (in milliseconds) between consecutive checkpoints. "
                                     + "This ensures that checkpoints are not triggered too frequently and provides.");
 
+    public static Option<Integer> CHECKPOINT_TOLERABLE_FAILED_CHECKPOINTS =
+            Options.key("checkpoint.tolerable-failed-checkpoints")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "The number of consecutive checkpoint failures that can be tolerated before the job fails. "
+                                    + "When unset, the cluster-level value from seatunnel.yaml is used; "
+                                    + "a non-positive effective value means any checkpoint failure fails the job.");
+
     public static Option<Boolean> CHECKPOINT_RETAIN_AFTER_JOB_CANCELLED =
             Options.key("checkpoint.retain-after-job-cancelled")
                     .booleanType()

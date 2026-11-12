@@ -178,6 +178,16 @@ public class PendingCheckpoint implements Checkpoint {
         }
     }
 
+    /**
+     * Aborts this checkpoint without failing its future. Used when the coordinator tolerates a
+     * checkpoint failure: the trigger chain must keep running and must not observe an error, which
+     * would otherwise be counted as another failure.
+     */
+    public void abortCheckpointTolerated(CheckpointCloseReason closedReason) {
+        this.failureCause = new CheckpointException(closedReason, null);
+        completableFuture.complete(null);
+    }
+
     // Avoid memory leak in ScheduledThreadPoolExecutor due to overly long timeout settings causing
     // numerous completed checkpoints to remain
     public void abortCheckpointTimeoutFutureWhenIsCompleted() {

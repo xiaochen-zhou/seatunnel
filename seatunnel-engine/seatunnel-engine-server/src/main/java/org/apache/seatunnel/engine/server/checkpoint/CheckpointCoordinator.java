@@ -171,6 +171,13 @@ public class CheckpointCoordinator {
     private final AtomicInteger pendingCounter = new AtomicInteger(0);
 
     /**
+     * Consecutive checkpoint failures since the last completed checkpoint. When the configured
+     * tolerable limit is positive, a failure below the limit only aborts the current checkpoint
+     * attempt instead of failing the job.
+     */
+    private final AtomicInteger consecutiveFailedCounter = new AtomicInteger(0);
+
+    /**
      * Indicates whether a schema change operation (e.g., DDL event) is currently in progress.
      *
      * <p>When set to {@code true}, normal periodic checkpoint triggering is temporarily suspended
@@ -345,6 +352,81 @@ public class CheckpointCoordinator {
                                     CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
                             return null;
                         });
+    }
+
+    /**
+     * Handles a failure of the current checkpoint attempt. Unlike {@link
+     * #handleCoordinatorError(CheckpointCloseReason, Throwable)} this may be tolerated: when the
+     * configured limit allows it, only the in-flight checkpoint is aborted so that the next
+     * scheduled checkpoint can run, and the job keeps running.
+     */
+    @VisibleForTesting
+    boolean handleTolerableCheckpointError(
+            String message, Throwable e, CheckpointCloseReason reason) {
+        if (tryTolerateCheckpointFailure(message, e, reason)) {
+            return true;
+        }
+        handleCoordinatorError(reason, e);
+        return false;
+    }
+
+    private boolean tryTolerateCheckpointFailure(
+            String message, Throwable e, CheckpointCloseReason reason) {
+        if (checkpointCoordinatorFuture.isDone()) {
+            // The coordinator already reached a terminal state; there is nothing left to tolerate.
+            return true;
+        }
+        int tolerableFailures = coordinatorConfig.getTolerableFailedCheckpoints();
+        if (tolerableFailures <= 0) {
+            return false;
+        }
+        int failedCount = consecutiveFailedCounter.incrementAndGet();
+        if (failedCount > tolerableFailures) {
+            LOG.error(
+                    "Checkpoint failures exceeded the tolerable limit ({}/{}), failing the job {}.",
+                    failedCount,
+                    tolerableFailures,
+                    jobId,
+                    e);
+            return false;
+        }
+        LOG.warn(
+                "Tolerated checkpoint failure ({}/{} consecutive failures) for job {}, pipeline {}: {}. "
+                        + "The failed checkpoint is aborted and the next checkpoint will be triggered.",
+                failedCount,
+                tolerableFailures,
+                jobId,
+                pipelineId,
+                message,
+                e);
+        abortPendingCheckpoints(reason);
+        return true;
+    }
+
+    /**
+     * Aborts the in-flight checkpoints without failing the coordinator, keeping the scheduler and
+     * task states untouched so the next checkpoint can be triggered normally.
+     */
+    private void abortPendingCheckpoints(CheckpointCloseReason reason) {
+        synchronized (lock) {
+            for (PendingCheckpoint pendingCheckpoint : pendingCheckpoints.values()) {
+                if (checkpointMonitorService != null
+                        && reason != CheckpointCloseReason.CHECKPOINT_COORDINATOR_RESET) {
+                    checkpointMonitorService.onCheckpointFailed(
+                            jobId,
+                            plan.getPipelineId(),
+                            pendingCheckpoint.getCheckpointId(),
+                            pendingCheckpoint.getCheckpointType(),
+                            reason,
+                            null,
+                            pendingCheckpoint.getCheckpointTimestamp());
+                }
+                pendingCheckpoint.abortCheckpointTolerated(reason);
+                pendingCheckpoint.abortCheckpointTimeoutFutureWhenIsCompleted();
+            }
+            pendingCheckpoints.clear();
+            pendingCounter.set(0);
+        }
     }
 
     @VisibleForTesting
@@ -555,13 +637,20 @@ public class CheckpointCoordinator {
                         tryTriggerPendingCheckpoint(checkpointType);
                     } catch (Throwable e) {
                         // A thrown trigger would otherwise drop the scheduled checkpoint chain
-                        // silently; fail the coordinator so the job can handle the error.
-                        handleCoordinatorError(
-                                String.format(
-                                        "Failed to trigger %s for job id: %s, pipeline id: %s",
-                                        checkpointType, jobId, pipelineId),
-                                e,
-                                CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
+                        // silently; fail the coordinator so the job can handle the error. When the
+                        // failure is tolerated the chain must be re-scheduled explicitly, because
+                        // the trigger threw before scheduling the next checkpoint.
+                        boolean tolerated =
+                                handleTolerableCheckpointError(
+                                        String.format(
+                                                "Failed to trigger %s for job id: %s, pipeline id: %s",
+                                                checkpointType, jobId, pipelineId),
+                                        e,
+                                        CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
+                        if (tolerated && !checkpointCoordinatorFuture.isDone()) {
+                            scheduleTriggerPendingCheckpoint(
+                                    checkpointType, coordinatorConfig.getCheckpointInterval());
+                        }
                     }
                 },
                 delayMills,
@@ -1002,7 +1091,7 @@ public class CheckpointCoordinator {
                     completableFuture.whenCompleteAsync(
                             (completedCheckpoint, error) -> {
                                 if (error != null) {
-                                    handleCoordinatorError(
+                                    handleTolerableCheckpointError(
                                             "trigger checkpoint failed",
                                             error,
                                             CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
@@ -1046,7 +1135,7 @@ public class CheckpointCoordinator {
                                 CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
                         return;
                     } catch (Exception e) {
-                        handleCoordinatorError(
+                        handleTolerableCheckpointError(
                                 "triggering checkpoint barrier failed",
                                 e,
                                 CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
@@ -1074,9 +1163,10 @@ public class CheckpointCoordinator {
                                                 LOG.info(
                                                         "timeout checkpoint: {}",
                                                         pendingCheckpoint.getInfo());
-                                                handleCoordinatorError(
-                                                        CheckpointCloseReason.CHECKPOINT_EXPIRED,
-                                                        null);
+                                                handleTolerableCheckpointError(
+                                                        "checkpoint expired before completing",
+                                                        null,
+                                                        CheckpointCloseReason.CHECKPOINT_EXPIRED);
                                             }
                                         },
                                         checkpointTimeout,
@@ -1100,7 +1190,7 @@ public class CheckpointCoordinator {
                                         // (in HA mode) and may block for a while.
                                         return checkpointIdCounter.getAndIncrement();
                                     } catch (Throwable e) {
-                                        handleCoordinatorError(
+                                        handleTolerableCheckpointError(
                                                 "get checkpoint id failed",
                                                 e,
                                                 CheckpointCloseReason.CHECKPOINT_INSIDE_ERROR);
@@ -1458,6 +1548,13 @@ public class CheckpointCoordinator {
             pendingCheckpoint.abortCheckpointTimeoutFutureWhenIsCompleted();
         }
         pendingCounter.decrementAndGet();
+        int previousFailedCount = consecutiveFailedCounter.getAndSet(0);
+        if (previousFailedCount > 0) {
+            LOG.info(
+                    "Reset the consecutive checkpoint failure counter ({} -> 0) because checkpoint {} completed.",
+                    previousFailedCount,
+                    checkpointId);
+        }
 
         if (isCompleted()) {
             cleanPendingCheckpoint(CheckpointCloseReason.CHECKPOINT_COORDINATOR_COMPLETED);
@@ -1677,5 +1774,12 @@ public class CheckpointCoordinator {
     @VisibleForTesting
     public Map<Long, SeaTunnelTaskState> getPipelineTaskStatus() {
         return pipelineTaskStatus;
+    }
+
+    /**
+     * @return the number of consecutive checkpoint failures since the last completed checkpoint.
+     */
+    public int getConsecutiveFailedCounter() {
+        return consecutiveFailedCounter.get();
     }
 }

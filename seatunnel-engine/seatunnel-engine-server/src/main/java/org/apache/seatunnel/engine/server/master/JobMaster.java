@@ -446,6 +446,8 @@ public class JobMaster {
         jobCheckpointConfig.setCheckpointTimeout(defaultCheckpointConfig.getCheckpointTimeout());
         jobCheckpointConfig.setCheckpointInterval(defaultCheckpointConfig.getCheckpointInterval());
         jobCheckpointConfig.setCheckpointMinPause(defaultCheckpointConfig.getCheckpointMinPause());
+        jobCheckpointConfig.setTolerableFailedCheckpoints(
+                defaultCheckpointConfig.getTolerableFailedCheckpoints());
         jobCheckpointConfig.setRetainAfterJobCancelled(
                 defaultCheckpointConfig.isRetainAfterJobCancelled());
 
@@ -476,6 +478,14 @@ public class JobMaster {
             jobCheckpointConfig.setCheckpointMinPause(
                     Long.parseLong(
                             jobEnv.get(EnvCommonOptions.CHECKPOINT_MIN_PAUSE.key()).toString()));
+        }
+        if (jobEnv.containsKey(EnvCommonOptions.CHECKPOINT_TOLERABLE_FAILED_CHECKPOINTS.key())) {
+            jobCheckpointConfig.setTolerableFailedCheckpoints(
+                    Integer.parseInt(
+                            jobEnv.get(
+                                            EnvCommonOptions.CHECKPOINT_TOLERABLE_FAILED_CHECKPOINTS
+                                                    .key())
+                                    .toString()));
         }
         if (jobEnv.containsKey(EnvCommonOptions.CHECKPOINT_RETAIN_AFTER_JOB_CANCELLED.key())) {
             jobCheckpointConfig.setRetainAfterJobCancelled(
