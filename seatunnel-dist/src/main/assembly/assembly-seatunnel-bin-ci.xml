@@ -222,7 +222,6 @@
                 <include>org.tikv:tikv-client-java:jar</include>
                 <include>org.opengauss:opengauss-jdbc:jar</include>
                 <include>org.duckdb:duckdb_jdbc:jar</include>
-                <include>com.amazonaws:aws-java-sdk-bundle:jar</include>
                 <include>org.apache.seatunnel:seatunnel-shade-hadoop3-uber:jar</include>
                 <include>org.apache.seatunnel:seatunnel-shade-hadoop-aws:jar</include>
                 <!--Add hadoop aliyun jar -->
