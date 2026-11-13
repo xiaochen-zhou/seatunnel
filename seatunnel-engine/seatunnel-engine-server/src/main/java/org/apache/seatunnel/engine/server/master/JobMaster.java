@@ -77,6 +77,7 @@ import org.apache.seatunnel.engine.server.execution.TaskExecutionState;
 import org.apache.seatunnel.engine.server.execution.TaskGroupLocation;
 import org.apache.seatunnel.engine.server.master.cleanup.JobCleanupRecord;
 import org.apache.seatunnel.engine.server.master.cleanup.PipelineCleanupRecord;
+import org.apache.seatunnel.engine.server.metrics.JobMetricsAccumulator;
 import org.apache.seatunnel.engine.server.metrics.JobMetricsUtil;
 import org.apache.seatunnel.engine.server.resourcemanager.AbstractResourceManager;
 import org.apache.seatunnel.engine.server.resourcemanager.ResourceManager;
@@ -127,6 +128,14 @@ public class JobMaster {
     private static final ILogger LOGGER = Logger.getLogger(JobMaster.class);
 
     private final Object metricsLock = new Object();
+
+    /**
+     * Metrics of the attempts that already failed and were restored, keyed by pipeline. They are
+     * merged with the final attempt before the finished-job snapshot is stored, so a retried job
+     * still reports everything it processed instead of only the last attempt.
+     */
+    private final Map<PipelineLocation, JobMetrics> restoredPipelineMetrics =
+            new ConcurrentHashMap<>();
 
     private PhysicalPlan physicalPlan;
 
@@ -1185,6 +1194,10 @@ public class JobMaster {
         List<RawJobMetrics> currJobMetrics =
                 this.getCurrJobMetrics(Collections.singletonList(pipelineLocation));
         JobMetrics jobMetrics = JobMetricsUtil.toJobMetrics(currJobMetrics);
+        JobMetrics restoredMetrics = restoredPipelineMetrics.remove(pipelineLocation);
+        if (restoredMetrics != null) {
+            jobMetrics = JobMetricsAccumulator.accumulate(restoredMetrics, jobMetrics);
+        }
         long jobId = this.getJobImmutableInformation().getJobId();
         synchronized (metricsLock) {
             jobHistoryService.storeFinishedPipelineMetrics(jobId, jobMetrics);
@@ -1286,6 +1299,7 @@ public class JobMaster {
      * @param pipelineLocation pipeline that is about to be restored
      */
     public void clearPipelineMetricsForRestore(PipelineLocation pipelineLocation) {
+        keepMetricsOfRestoredAttempt(pipelineLocation);
         try {
             cleanTaskGroupContext(pipelineLocation);
         } catch (Exception e) {
@@ -1293,6 +1307,32 @@ public class JobMaster {
                     "Failed to clean task-group contexts before restoring " + pipelineLocation, e);
         }
         removePipelineMetrics(pipelineLocation);
+    }
+
+    /**
+     * Keeps the metrics of the failed attempt before they are wiped for the restore, so the
+     * finished-job snapshot can still report the data that attempt already processed.
+     */
+    private void keepMetricsOfRestoredAttempt(PipelineLocation pipelineLocation) {
+        try {
+            JobMetrics failedAttemptMetrics =
+                    JobMetricsUtil.toJobMetrics(
+                            this.getCurrJobMetrics(Collections.singletonList(pipelineLocation)));
+            if (failedAttemptMetrics.getMetrics().isEmpty()) {
+                return;
+            }
+            restoredPipelineMetrics.merge(
+                    pipelineLocation, failedAttemptMetrics, JobMetricsAccumulator::accumulate);
+            LOGGER.info(
+                    String.format(
+                            "Keep metrics of the failed attempt of pipeline %s before restoring it.",
+                            pipelineLocation));
+        } catch (Exception e) {
+            LOGGER.warning(
+                    String.format(
+                            "Failed to keep metrics of the failed attempt of pipeline %s: %s",
+                            pipelineLocation, ExceptionUtils.getMessage(e)));
+        }
     }
 
     /**
