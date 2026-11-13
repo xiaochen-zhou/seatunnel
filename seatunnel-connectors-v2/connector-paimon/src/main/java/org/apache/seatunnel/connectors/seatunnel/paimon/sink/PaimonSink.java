@@ -56,6 +56,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -110,6 +111,14 @@ public class PaimonSink
                 return;
             }
             this.paimonTable = (FileStoreTable) paimonCatalog.getPaimonTable(tablePath);
+            Map<String, String> dynamicWriteProps = paimonSinkConfig.getDynamicWriteProps();
+            if (!dynamicWriteProps.isEmpty()) {
+                log.info(
+                        "Apply runtime write properties {} to paimon table {}.",
+                        dynamicWriteProps,
+                        tablePath);
+                this.paimonTable = (FileStoreTable) this.paimonTable.copy(dynamicWriteProps);
+            }
             String branchName = paimonSinkConfig.getBranch();
             if (StringUtils.isNotEmpty(branchName)) {
                 BranchManager branchManager = paimonTable.branchManager();
@@ -202,6 +211,13 @@ public class PaimonSink
 
     @Override
     public void setLoadTable(Table table) {
+        Map<String, String> dynamicWriteProps = paimonSinkConfig.getDynamicWriteProps();
+        if (!dynamicWriteProps.isEmpty()) {
+            log.info(
+                    "Apply runtime write properties {} on the reloaded paimon table.",
+                    dynamicWriteProps);
+            table = table.copy(dynamicWriteProps);
+        }
         this.paimonTable = (FileStoreTable) table;
     }
 

@@ -29,10 +29,13 @@ import org.apache.paimon.CoreOptions;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Getter
@@ -96,6 +99,56 @@ public class PaimonSinkConfig extends PaimonConfig {
                 writeProps.getOrDefault(
                         PaimonSinkOptions.CHANGELOG_TMP_PATH, System.getProperty("java.io.tmpdir"));
         this.branch = readonlyConfig.get(PaimonSinkOptions.BRANCH);
+    }
+
+    /**
+     * Write properties that can be re-applied on an existing Paimon table at runtime through {@link
+     * org.apache.paimon.table.Table#copy(Map)}.
+     *
+     * <p>Physical layout options ({@code bucket}, {@code bucket-key}, {@code partition}, primary
+     * key, file format ...) are intentionally excluded: they define how data files are laid out and
+     * changing them on an existing table would corrupt the bucket/schema contract. Only options
+     * that tune flush/compaction behaviour of the writer are applied.
+     */
+    public static final Set<String> DYNAMIC_WRITE_PROP_KEYS =
+            Collections.unmodifiableSet(
+                    new LinkedHashSet<>(
+                            Arrays.asList(
+                                    CoreOptions.NUM_SORTED_RUNS_COMPACTION_TRIGGER.key(),
+                                    CoreOptions.NUM_SORTED_RUNS_STOP_TRIGGER.key(),
+                                    CoreOptions.COMPACTION_MAX_SIZE_AMPLIFICATION_PERCENT.key(),
+                                    CoreOptions.COMPACTION_SIZE_RATIO.key(),
+                                    CoreOptions.COMPACTION_MIN_FILE_NUM.key(),
+                                    CoreOptions.COMPACTION_OPTIMIZATION_INTERVAL.key(),
+                                    CoreOptions.FULL_COMPACTION_DELTA_COMMITS.key(),
+                                    CoreOptions.COMMIT_FORCE_COMPACT.key(),
+                                    CoreOptions.WRITE_ONLY.key(),
+                                    CoreOptions.WRITE_BUFFER_SIZE.key(),
+                                    CoreOptions.WRITE_BUFFER_SPILLABLE.key(),
+                                    CoreOptions.LOCAL_MERGE_BUFFER_SIZE.key(),
+                                    CoreOptions.SORT_SPILL_BUFFER_SIZE.key(),
+                                    CoreOptions.TARGET_FILE_SIZE.key())));
+
+    /**
+     * Runtime writer properties from {@code paimon.table.write-props}, filtered to the options that
+     * are safe to apply on an existing table.
+     */
+    public Map<String, String> getDynamicWriteProps() {
+        return filterDynamicWriteProps(this.writeProps);
+    }
+
+    static Map<String, String> filterDynamicWriteProps(Map<String, String> writeProps) {
+        if (writeProps == null || writeProps.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> dynamic = new HashMap<>();
+        for (Map.Entry<String, String> entry : writeProps.entrySet()) {
+            String key = entry.getKey() == null ? null : entry.getKey().trim();
+            if (key != null && entry.getValue() != null && DYNAMIC_WRITE_PROP_KEYS.contains(key)) {
+                dynamic.put(key, entry.getValue());
+            }
+        }
+        return dynamic;
     }
 
     /**
