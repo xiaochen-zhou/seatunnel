@@ -54,7 +54,7 @@ public class S3FileBaseOptions extends FileBaseSourceOptions {
      * from the runtime environment (for example an EC2 instance profile).
      */
     public static final String INSTANCE_PROFILE_CREDENTIALS_PROVIDER =
-            "com.amazonaws.auth.InstanceProfileCredentialsProvider";
+            "software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider";
 
     /**
      * The legacy typed S3A credentials provider option.
@@ -73,12 +73,13 @@ public class S3FileBaseOptions extends FileBaseSourceOptions {
     /**
      * The S3A credentials provider class name passed through to Hadoop. Any fully-qualified S3A
      * credentials provider class available on the classpath is accepted, so container-oriented
-     * providers (for example {@code com.amazonaws.auth.ContainerCredentialsProvider}) and custom
-     * providers can be used in addition to the two well-known values {@link
-     * #SIMPLE_AWS_CREDENTIALS_PROVIDER} and {@link #INSTANCE_PROFILE_CREDENTIALS_PROVIDER}. Hadoop
-     * also accepts a comma- or newline-separated chain of provider classes. The class must be
-     * present on the runtime classpath of every node running the S3A filesystem (for example under
-     * {@code ${SEATUNNEL_HOME}/lib}).
+     * providers (for example {@code
+     * software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider}) and custom providers
+     * can be used in addition to the two well-known values {@link #SIMPLE_AWS_CREDENTIALS_PROVIDER}
+     * and {@link #INSTANCE_PROFILE_CREDENTIALS_PROVIDER}. Hadoop also accepts a comma- or
+     * newline-separated chain of provider classes. The class must be present on the runtime
+     * classpath of every node running the S3A filesystem (for example under {@code
+     * ${SEATUNNEL_HOME}/lib}).
      */
     public static final Option<String> S3A_AWS_CREDENTIALS_PROVIDER_CLASS =
             Options.key(S3A_AWS_CREDENTIALS_PROVIDER.key())

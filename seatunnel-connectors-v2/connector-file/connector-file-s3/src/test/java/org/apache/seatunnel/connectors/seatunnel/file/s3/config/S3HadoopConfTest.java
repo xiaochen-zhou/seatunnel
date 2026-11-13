@@ -268,5 +268,5 @@ public class S3HadoopConfTest {
      * eager validation rejects abstract classes, matching Hadoop {@code S3AUtils} behavior.
      */
     abstract static class AbstractTestCredentialsProvider
-            implements com.amazonaws.auth.AWSCredentialsProvider {}
+            implements software.amazon.awssdk.auth.credentials.AwsCredentialsProvider {}
 }

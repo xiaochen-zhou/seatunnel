@@ -110,13 +110,13 @@ public class S3HadoopConf extends HadoopConf {
     /**
      * The AWS credentials provider contract every configured provider class must implement. Hadoop
      * S3A's {@code S3AUtils.createAWSCredentialProvider} performs the exact same {@code
-     * AWSCredentialsProvider.isAssignableFrom(clazz)} check (and rejects abstract classes) before
+     * AwsCredentialsProvider.isAssignableFrom(clazz)} check (and rejects abstract classes) before
      * it reflectively instantiates the class, so validating it here only moves that failure
      * earlier, from an opaque worker-side {@code IOException} to an actionable config-parse-time
      * error. It never rejects anything Hadoop itself would have accepted.
      */
     private static final String AWS_CREDENTIALS_PROVIDER_INTERFACE =
-            "com.amazonaws.auth.AWSCredentialsProvider";
+            "software.amazon.awssdk.auth.credentials.AwsCredentialsProvider";
 
     /**
      * Best-effort eager validation of the configured S3A credentials provider value on the node
@@ -124,9 +124,9 @@ public class S3HadoopConf extends HadoopConf {
      * provider classes, so each entry is validated independently.
      *
      * <p>Provider names are parsed with Hadoop's own {@link StringUtils#getTrimmedStrings(String)}
-     * utility. This preserves Hadoop 3.1.4 behavior for whitespace, newlines, and trailing
-     * separators while still allowing an interior empty entry such as {@code "A,,B"} to fail with
-     * an actionable error.
+     * utility. This preserves Hadoop 3.4 behavior for whitespace, newlines, and trailing separators
+     * while still allowing an interior empty entry such as {@code "A,,B"} to fail with an
+     * actionable error.
      *
      * <p>The provider is ultimately instantiated on every worker by Hadoop S3A, and the classpath
      * of the node building this configuration (client/coordinator, or a module embedding this

@@ -1155,12 +1155,6 @@
                     <scope>provided</scope>
                 </dependency>
                 <dependency>
-                    <groupId>com.amazonaws</groupId>
-                    <artifactId>aws-java-sdk-bundle</artifactId>
-                    <version>${aws-java-sdk.version}</version>
-                    <scope>provided</scope>
-                </dependency>
-                <dependency>
                     <groupId>org.apache.hadoop</groupId>
                     <artifactId>hadoop-aliyun</artifactId>
                     <version>${hadoop-aliyun.version}</version>

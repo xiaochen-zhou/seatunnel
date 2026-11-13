@@ -34,19 +34,22 @@ import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
 import org.apache.hadoop.fs.s3a.Constants;
 import org.apache.hadoop.fs.s3a.DefaultS3ClientFactory;
 import org.apache.hadoop.fs.s3a.S3AUtils;
+import org.apache.hadoop.fs.s3a.S3ClientFactory;
+import org.apache.hadoop.fs.s3a.auth.CredentialProviderListFactory;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.ListObjectsV2Request;
-import com.amazonaws.services.s3.model.ListObjectsV2Result;
-import com.amazonaws.services.s3.model.ObjectListing;
+import software.amazon.awssdk.core.client.config.ClientOverrideConfiguration;
+import software.amazon.awssdk.core.retry.RetryPolicy;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 
@@ -88,11 +91,11 @@ final class S3SourceDryRunValidator {
         URI bucket = bucketUri(options);
         Path path = sourcePath(options, bucket);
         Configuration configuration = validationConfiguration(options, bucket);
-        // Validate pure SDK settings before Hadoop creates any credential providers.
-        DefaultS3ClientFactory.createAwsConf(configuration);
-        try (DryRunClientFactory factory = new DryRunClientFactory()) {
-            factory.setConf(configuration);
-            AmazonS3 client = factory.createS3Client(bucket);
+        DryRunClientFactory factory = new DryRunClientFactory(configuration);
+        try (AWSCredentialProviderList credentials =
+                        CredentialProviderListFactory.createAWSCredentialProviderList(
+                                bucket, configuration);
+                S3Client client = factory.createClient(bucket, configuration, credentials)) {
             validatePath(
                     client,
                     bucket.getHost(),
@@ -154,18 +157,9 @@ final class S3SourceDryRunValidator {
         Configuration configuration = hadoopConf.toConfiguration();
         hadoopConf.setExtraOptionsForConfiguration(configuration);
         configuration = S3AUtils.propagateBucketOptions(configuration, bucket.getHost());
-        if (configuration.getBoolean(Constants.PURGE_EXISTING_MULTIPART, false)
-                || !Constants.S3GUARD_METASTORE_NULL.equals(
-                        configuration.get(
-                                Constants.S3_METADATA_STORE_IMPL, Constants.S3GUARD_METASTORE_NULL))
-                || !Constants.DEFAULT_S3_CLIENT_FACTORY_IMPL
-                        .getName()
-                        .equals(
-                                configuration.get(
-                                        Constants.S3_CLIENT_FACTORY_IMPL,
-                                        Constants.DEFAULT_S3_CLIENT_FACTORY_IMPL.getName()))) {
+        if (configuration.getBoolean(Constants.PURGE_EXISTING_MULTIPART, false)) {
             throw new IllegalArgumentException(
-                    "S3File connect dry-run does not support multipart purge, S3Guard or a custom S3 client factory.");
+                    "S3File connect dry-run does not support multipart purge.");
         }
         if (!configuration.getTrimmed(Constants.S3A_SECURITY_CREDENTIAL_PROVIDER_PATH, "").isEmpty()
                 || "SSE-C"
@@ -177,30 +171,28 @@ final class S3SourceDryRunValidator {
         }
         clampTimeout(configuration, bucket, Constants.ESTABLISH_TIMEOUT);
         clampTimeout(configuration, bucket, Constants.SOCKET_TIMEOUT);
-        for (String key :
-                Arrays.asList(
-                        Constants.MAX_ERROR_RETRIES,
-                        Constants.RETRY_LIMIT,
-                        Constants.RETRY_THROTTLE_LIMIT)) {
-            S3AUtils.clearBucketOption(configuration, bucket.getHost(), key);
-            configuration.setInt(key, 0);
-        }
+        S3AUtils.clearBucketOption(configuration, bucket.getHost(), Constants.MAX_ERROR_RETRIES);
+        configuration.setInt(Constants.MAX_ERROR_RETRIES, 0);
         return configuration;
     }
 
     /** Caps each network wait at five seconds for preflight, retaining stricter user limits. */
     private static void clampTimeout(Configuration configuration, URI bucket, String key) {
-        int configured = configuration.getInt(key, NETWORK_TIMEOUT_MILLIS);
+        long configured =
+                configuration.getTimeDuration(
+                        key,
+                        NETWORK_TIMEOUT_MILLIS + "ms",
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
         if (configured < 0) {
             throw new IllegalArgumentException(
                     "S3File connect dry-run requires non-negative " + key);
         }
         S3AUtils.clearBucketOption(configuration, bucket.getHost(), key);
-        configuration.setInt(
-                key,
+        long clamped =
                 configured == 0
                         ? NETWORK_TIMEOUT_MILLIS
-                        : Math.min(configured, NETWORK_TIMEOUT_MILLIS));
+                        : Math.min(configured, NETWORK_TIMEOUT_MILLIS);
+        configuration.set(key, clamped + "ms");
     }
 
     /**
@@ -209,7 +201,7 @@ final class S3SourceDryRunValidator {
      * absence.
      */
     static void validatePath(
-            AmazonS3 client,
+            S3Client client,
             String bucket,
             Path path,
             FileDiscoveryMode discoveryMode,
@@ -218,35 +210,28 @@ final class S3SourceDryRunValidator {
         String key = path.toUri().getPath().substring(1);
         if (!key.isEmpty()) {
             try {
-                client.getObjectMetadata(bucket, key);
+                client.headObject(HeadObjectRequest.builder().bucket(bucket).key(key).build());
                 return;
-            } catch (AmazonS3Exception e) {
-                if (e.getStatusCode() != 404) {
+            } catch (NoSuchKeyException e) {
+                // Missing object: fall back to one bounded prefix listing below.
+            } catch (S3Exception e) {
+                if (e.statusCode() != 404) {
                     throw e;
                 }
             }
         }
         String prefix = key.isEmpty() || key.endsWith("/") ? key : key + "/";
-        boolean empty;
-        if (listVersion == 1) {
-            ObjectListing result =
-                    client.listObjects(
-                            new ListObjectsRequest()
-                                    .withBucketName(bucket)
-                                    .withPrefix(prefix)
-                                    .withDelimiter("/")
-                                    .withMaxKeys(1));
-            empty = result.getObjectSummaries().isEmpty() && result.getCommonPrefixes().isEmpty();
-        } else {
-            ListObjectsV2Result result =
-                    client.listObjectsV2(
-                            new ListObjectsV2Request()
-                                    .withBucketName(bucket)
-                                    .withPrefix(prefix)
-                                    .withDelimiter("/")
-                                    .withMaxKeys(1));
-            empty = result.getObjectSummaries().isEmpty() && result.getCommonPrefixes().isEmpty();
-        }
+        // The v2 SDK only exposes ListObjectsV2; the S3A list version setting is kept for
+        // configuration parity but cannot select the legacy v1 listing API here.
+        ListObjectsV2Response result =
+                client.listObjectsV2(
+                        ListObjectsV2Request.builder()
+                                .bucket(bucket)
+                                .prefix(prefix)
+                                .delimiter("/")
+                                .maxKeys(1)
+                                .build());
+        boolean empty = result.contents().isEmpty() && result.commonPrefixes().isEmpty();
         // Only a successful empty listing proves an accessible prefix awaiting its first file.
         if (empty && !key.isEmpty() && discoveryMode != FileDiscoveryMode.CONTINUOUS) {
             throw new FileNotFoundException(
@@ -254,31 +239,49 @@ final class S3SourceDryRunValidator {
         }
     }
 
-    /** Owns the client and credential chain without creating a shared S3A filesystem. */
-    private static final class DryRunClientFactory extends DefaultS3ClientFactory
-            implements AutoCloseable {
-        private AmazonS3 client;
-        private AWSCredentialProviderList credentials;
+    /** Builds a short-lived client from the source configuration and owns its lifecycle. */
+    private static final class DryRunClientFactory extends DefaultS3ClientFactory {
+        private final int timeoutMillis;
 
-        @Override
-        protected AmazonS3 newAmazonS3Client(
-                AWSCredentialsProvider credentials, ClientConfiguration configuration) {
-            this.credentials = (AWSCredentialProviderList) credentials;
-            this.client = super.newAmazonS3Client(credentials, configuration);
-            return client;
+        private DryRunClientFactory(Configuration configuration) {
+            setConf(configuration);
+            this.timeoutMillis =
+                    (int)
+                            Math.max(
+                                    1L,
+                                    configuration.getTimeDuration(
+                                            Constants.SOCKET_TIMEOUT,
+                                            NETWORK_TIMEOUT_MILLIS + "ms",
+                                            java.util.concurrent.TimeUnit.MILLISECONDS));
+        }
+
+        private S3Client createClient(
+                URI bucket, Configuration configuration, AWSCredentialProviderList credentials)
+                throws IOException {
+            S3ClientFactory.S3ClientCreationParameters parameters =
+                    new S3ClientFactory.S3ClientCreationParameters()
+                            .withCredentialSet(credentials)
+                            .withPathStyleAccess(
+                                    configuration.getBoolean(Constants.PATH_STYLE_ACCESS, false));
+            String endpoint = configuration.getTrimmed(Constants.ENDPOINT, "");
+            if (!endpoint.isEmpty()) {
+                parameters.withEndpoint(endpoint);
+            }
+            String region = configuration.getTrimmed(Constants.AWS_REGION, "");
+            if (!region.isEmpty()) {
+                parameters.withRegion(region);
+            }
+            return createS3Client(bucket, parameters);
         }
 
         @Override
-        public void close() {
-            try {
-                if (client != null) {
-                    client.shutdown();
-                }
-            } finally {
-                if (credentials != null) {
-                    credentials.close();
-                }
-            }
+        protected ClientOverrideConfiguration.Builder createClientOverrideConfiguration(
+                S3ClientFactory.S3ClientCreationParameters parameters, Configuration configuration)
+                throws IOException {
+            return super.createClientOverrideConfiguration(parameters, configuration)
+                    .apiCallTimeout(Duration.ofMillis(timeoutMillis))
+                    .apiCallAttemptTimeout(Duration.ofMillis(timeoutMillis))
+                    .retryPolicy(RetryPolicy.none());
         }
     }
 }

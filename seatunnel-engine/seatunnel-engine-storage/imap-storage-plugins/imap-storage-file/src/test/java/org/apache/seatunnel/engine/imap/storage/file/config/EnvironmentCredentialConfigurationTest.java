@@ -20,7 +20,7 @@ package org.apache.seatunnel.engine.imap.storage.file.config;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.aliyun.oss.AliyunOSSUtils;
 import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
-import org.apache.hadoop.fs.s3a.S3AUtils;
+import org.apache.hadoop.fs.s3a.auth.CredentialProviderListFactory;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -31,7 +31,8 @@ import org.junit.jupiter.api.parallel.ResourceLock;
 import com.aliyun.oss.common.auth.Credentials;
 import com.aliyun.oss.common.auth.CredentialsProvider;
 import com.aliyun.oss.common.auth.EnvironmentVariableCredentialsProvider;
-import com.amazonaws.auth.AWSSessionCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentials;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 
 import java.net.URI;
 import java.util.HashMap;
@@ -80,19 +81,19 @@ public class EnvironmentCredentialConfigurationTest {
                                             .buildConfiguration(config);
 
                             try (AWSCredentialProviderList providers =
-                                    S3AUtils.createAWSCredentialProviderSet(
+                                    CredentialProviderListFactory.createAWSCredentialProviderList(
                                             URI.create("s3a://seatunnel-imap"), hadoopConf)) {
-                                AWSSessionCredentials credentials =
+                                AwsCredentials credentials = providers.resolveCredentials();
+                                AwsSessionCredentials sessionCredentials =
                                         Assertions.assertInstanceOf(
-                                                AWSSessionCredentials.class,
-                                                providers.getCredentials());
+                                                AwsSessionCredentials.class, credentials);
 
                                 Assertions.assertEquals(
-                                        S3_ACCESS_KEY, credentials.getAWSAccessKeyId());
+                                        S3_ACCESS_KEY, sessionCredentials.accessKeyId());
                                 Assertions.assertEquals(
-                                        S3_SECRET_KEY, credentials.getAWSSecretKey());
+                                        S3_SECRET_KEY, sessionCredentials.secretAccessKey());
                                 Assertions.assertEquals(
-                                        S3_SESSION_TOKEN, credentials.getSessionToken());
+                                        S3_SESSION_TOKEN, sessionCredentials.sessionToken());
                             }
                         });
     }

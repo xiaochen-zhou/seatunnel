@@ -236,7 +236,7 @@ If you assign file type to `parquet` `orc`, schema option not required, connecto
 | file_format_type                | string  | yes      | -                                                     | File type, supported as the following file types: `text` `csv` `parquet` `orc` `json` `excel` `xml` `binary` `markdown` `pdf`                                                                                                                                                                                                                                                                                    |
 | bucket                          | string  | yes      | -                                                     | The bucket address of s3 file system, for example: `s3n://seatunnel-test`, if you use `s3a` protocol, this parameter should be `s3a://seatunnel-test`.                                                                                                                                                                                                                                                     |
 | fs.s3a.endpoint                 | string  | yes      | -                                                     | fs s3a endpoint                                                                                                                                                                                                                                                                                                                                                                                            |
-| fs.s3a.aws.credentials.provider | string  | yes      | com.amazonaws.auth.InstanceProfileCredentialsProvider | The fully-qualified class name of the S3A credentials provider passed through to Hadoop. Besides the two well-known values `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider` (static `access_key`/`secret_key`) and `com.amazonaws.auth.InstanceProfileCredentialsProvider` (default), any S3A credentials provider class available on the classpath is accepted, for example container-based providers such as `com.amazonaws.auth.ContainerCredentialsProvider` or a custom provider. The class must implement `com.amazonaws.auth.AWSCredentialsProvider` and expose one of Hadoop 3.1.4's supported creation mechanisms: a public `(java.net.URI, org.apache.hadoop.conf.Configuration)` constructor, a public `(org.apache.hadoop.conf.Configuration)` constructor, a public static no-arg `getInstance()` factory method returning `AWSCredentialsProvider`, or a public no-arg constructor. Hadoop-style comma- or newline-separated provider chains are accepted and each class is validated independently. The provider jar must be present on the runtime classpath of **every** cluster node (for example under `${SEATUNNEL_HOME}/lib`), not just the submitting node. Note for operators of shared/multi-tenant clusters: this option lets job authors load classes by name, so restrict who can submit jobs accordingly. More information about the credential provider you can see [Hadoop AWS Document](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html#Simple_name.2Fsecret_credentials_with_SimpleAWSCredentialsProvider.2A) |
+| fs.s3a.aws.credentials.provider | string  | yes      | software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider | The fully-qualified class name of the S3A credentials provider passed through to Hadoop. Besides the two well-known values `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider` (static `access_key`/`secret_key`) and `software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider` (default), any S3A credentials provider class available on the classpath is accepted, for example container-based providers such as `software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider` or a custom provider. The class must implement `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` and expose one of Hadoop 3.4's supported creation mechanisms: a public `(java.net.URI, org.apache.hadoop.conf.Configuration)` constructor, a public `(org.apache.hadoop.conf.Configuration)` constructor, a public static no-arg `getInstance()` factory method returning `AWSCredentialsProvider`, or a public no-arg constructor. Hadoop-style comma- or newline-separated provider chains are accepted and each class is validated independently. The provider jar must be present on the runtime classpath of **every** cluster node (for example under `${SEATUNNEL_HOME}/lib`), not just the submitting node. Note for operators of shared/multi-tenant clusters: this option lets job authors load classes by name, so restrict who can submit jobs accordingly. More information about the credential provider you can see [Hadoop AWS Document](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html#Simple_name.2Fsecret_credentials_with_SimpleAWSCredentialsProvider.2A) |
 | read_columns                    | list    | no       | -                                                     | The read column list of the data source, user can use it to implement field projection. The file type supported column projection as the following shown: `text` `csv` `parquet` `orc` `json` `excel` `xml` . If the user wants to use this feature when reading `text` `json` `csv` files, the "schema" option must be configured.                                                                        |
 | read_partitions | list | no | - | The partitions that the user wants to read, e.g. `["year=2024"]`. When set, only these partitions are read. |
 | access_key                      | string  | no       | -                                                     | Only used when `fs.s3a.aws.credentials.provider = org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider `                                                                                                                                                                                                                                                                                                  |
@@ -606,7 +606,7 @@ sink {
     path = "/seatunnel/json"
     bucket = "s3a://seatunnel-test"
     fs.s3a.endpoint="s3.cn-north-1.amazonaws.com.cn"
-    fs.s3a.aws.credentials.provider="com.amazonaws.auth.InstanceProfileCredentialsProvider"
+    fs.s3a.aws.credentials.provider="software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider"
     file_format_type = "json"
     schema {
       fields {
@@ -634,7 +634,7 @@ source {
     path = "/seatunnel/json"
     bucket = "s3a://seatunnel-test"
     fs.s3a.endpoint="s3.cn-north-1.amazonaws.com.cn"
-    fs.s3a.aws.credentials.provider="com.amazonaws.auth.InstanceProfileCredentialsProvider"
+    fs.s3a.aws.credentials.provider="software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider"
     file_format_type = "json"
     read_columns = ["id", "name"]
     schema {
@@ -672,7 +672,7 @@ source {
     path = "/seatunnel/json"
     bucket = "s3a://seatunnel-test"
     fs.s3a.endpoint="s3.cn-north-1.amazonaws.com.cn"
-    fs.s3a.aws.credentials.provider="com.amazonaws.auth.InstanceProfileCredentialsProvider"
+    fs.s3a.aws.credentials.provider="software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider"
     file_format_type = "json"
     read_columns = ["id", "name"]
     // file example abcD2024.csv
@@ -707,21 +707,21 @@ source {
 }
 ```
 
-The same pattern works for AWS SSO/Profile providers by swapping the provider class (for example `com.amazonaws.auth.profile.ProfileCredentialsProvider` with `fs.s3a.profile` and `fs.s3a.credentialsFile` keys) — pass those provider-specific keys under `hadoop_s3_properties`. See the [Hadoop AWS](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html) documentation for the full set of supported `fs.s3a.*` keys.
+The same pattern works for AWS SSO/Profile providers by swapping the provider class (for example `software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider` with `fs.s3a.profile` and `fs.s3a.credentialsFile` keys) — pass those provider-specific keys under `hadoop_s3_properties`. See the [Hadoop AWS](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html) documentation for the full set of supported `fs.s3a.*` keys.
 
 ## Credential Provider in Container Environments
 
-When running SeaTunnel in container environments (Kubernetes, ECS, EKS, Docker), the S3File connector accepts any fully-qualified S3A credentials provider class that implements `com.amazonaws.auth.AWSCredentialsProvider` and is available on the classpath. The `fs.s3a.aws.credentials.provider` option is validated at config-parse time when the class is resolvable on the node building the configuration: the class must implement the AWS credentials provider interface and must not be abstract. When the class cannot be resolved (e.g., the provider JAR is only available on worker nodes), validation is deferred to runtime on the worker actually running S3A.
+When running SeaTunnel in container environments (Kubernetes, ECS, EKS, Docker), the S3File connector accepts any fully-qualified S3A credentials provider class that implements `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` and is available on the classpath. The `fs.s3a.aws.credentials.provider` option is validated at config-parse time when the class is resolvable on the node building the configuration: the class must implement the AWS credentials provider interface and must not be abstract. When the class cannot be resolved (e.g., the provider JAR is only available on worker nodes), validation is deferred to runtime on the worker actually running S3A.
 
 ### Supported Credential Providers
 
 | Provider | Class Name | Typical Use |
 |----------|------------|-------------|
 | Simple AWSCredentials | `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider` | Static access key / secret key |
-| Instance Profile | `com.amazonaws.auth.InstanceProfileCredentialsProvider` | EC2 instance role (default) |
-| Container | `com.amazonaws.auth.ContainerCredentialsProvider` | ECS task role |
-| Default Chain | `com.amazonaws.auth.DefaultAWSCredentialsProviderChain` | Multi-source fallback chain |
-| Custom | Any `com.amazonaws.auth.AWSCredentialsProvider` implementation | User-defined provider |
+| Instance Profile | `software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider` | EC2 instance role (default) |
+| Container | `software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider` | ECS task role |
+| Default Chain | `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider` | Multi-source fallback chain |
+| Custom | Any `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` implementation | User-defined provider |
 
 ### Kubernetes / EKS Configuration
 
@@ -756,7 +756,7 @@ S3File {
 S3File {
   bucket = "s3a://my-bucket"
   fs.s3a.endpoint = "s3.amazonaws.com"
-  fs.s3a.aws.credentials.provider = "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+  fs.s3a.aws.credentials.provider = "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider"
   path = "/data/input"
   file_format_type = "parquet"
 }
@@ -770,7 +770,7 @@ When running on ECS with the `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` environmen
 S3File {
   bucket = "s3a://my-bucket"
   fs.s3a.endpoint = "s3.amazonaws.com"
-  fs.s3a.aws.credentials.provider = "com.amazonaws.auth.ContainerCredentialsProvider"
+  fs.s3a.aws.credentials.provider = "software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider"
   path = "/data/input"
   file_format_type = "parquet"
 }
@@ -806,7 +806,7 @@ The connector passes these keys directly to the Hadoop S3A configuration. Note: 
 - `InstanceProfileCredentialsProvider`: verify the EC2 instance has an IAM role attached.
 - `ContainerCredentialsProvider`: verify the `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` environment variable is set.
 
-**`IllegalArgumentException` at config-parse time**: The class name is malformed or the class does not implement `com.amazonaws.auth.AWSCredentialsProvider`. Verify the fully-qualified class name and that the class implements the required interface.
+**`IllegalArgumentException` at config-parse time**: The class name is malformed or the class does not implement `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider`. Verify the fully-qualified class name and that the class implements the required interface.
 
 ## Changelog
 

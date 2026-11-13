@@ -109,7 +109,7 @@ import ChangeLog from '../changelog/connector-file-s3.md';
 | tmp_path                              | string  | 否    | /tmp/seatunnel                                        | 结果文件将首先写入临时路径，然后使用 `mv` 将临时目录提交到目标目录。需要一个 S3 目录。                                                                                    |
 | bucket                                | string  | 是    | -                                                     |                                                                                                                                     |
 | fs.s3a.endpoint                       | string  | 是    | -                                                     |                                                                                                                                     |
-| fs.s3a.aws.credentials.provider       | string  | 是    | com.amazonaws.auth.InstanceProfileCredentialsProvider | 透传给 Hadoop 的 S3A 凭据提供程序的全限定类名。除了两个常用值 `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider`（使用静态 `access_key`/`secret_key`）和 `com.amazonaws.auth.InstanceProfileCredentialsProvider`（默认值）之外，任何 classpath 上可用的 S3A 凭据提供程序类都可以使用，例如基于容器的 `com.amazonaws.auth.ContainerCredentialsProvider` 或自定义提供程序。该类必须实现 `com.amazonaws.auth.AWSCredentialsProvider` 接口，并提供 Hadoop 3.1.4 支持的任一创建方式：公共 `(java.net.URI, org.apache.hadoop.conf.Configuration)` 构造器、公共 `(org.apache.hadoop.conf.Configuration)` 构造器、返回 `AWSCredentialsProvider` 的公共静态无参 `getInstance()` 工厂方法，或公共无参构造器。支持 Hadoop 风格的逗号或换行分隔的提供程序链，且每个类都会被独立校验。该提供程序 jar 必须存在于**每个**集群节点的运行时 classpath 中（例如放在 `${SEATUNNEL_HOME}/lib` 下），而不仅仅是提交作业的节点。共享/多租户集群的运维者请注意：此选项允许作业编写者按类名加载类，因此请相应地限制作业提交权限。 |
+| fs.s3a.aws.credentials.provider       | string  | 是    | software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider | 透传给 Hadoop 的 S3A 凭据提供程序的全限定类名。除了两个常用值 `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider`（使用静态 `access_key`/`secret_key`）和 `software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider`（默认值）之外，任何 classpath 上可用的 S3A 凭据提供程序类都可以使用，例如基于容器的 `software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider` 或自定义提供程序。该类必须实现 `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` 接口，并提供 Hadoop 3.1.4 支持的任一创建方式：公共 `(java.net.URI, org.apache.hadoop.conf.Configuration)` 构造器、公共 `(org.apache.hadoop.conf.Configuration)` 构造器、返回 `AWSCredentialsProvider` 的公共静态无参 `getInstance()` 工厂方法，或公共无参构造器。支持 Hadoop 风格的逗号或换行分隔的提供程序链，且每个类都会被独立校验。该提供程序 jar 必须存在于**每个**集群节点的运行时 classpath 中（例如放在 `${SEATUNNEL_HOME}/lib` 下），而不仅仅是提交作业的节点。共享/多租户集群的运维者请注意：此选项允许作业编写者按类名加载类，因此请相应地限制作业提交权限。 |
 | access_key                            | string  | 否    | -                                                     | 仅当 fs.s3a.aws.credentials.provider = org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider 时使用                                      |
 | secret_key                            | string  | 否    | -                                                     | 仅当 fs.s3a.aws.credentials.provider = org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider 时使用                                      |
 | custom_filename                       | boolean | 否    | false                                                 | 是否需要自定义文件名                                                                                                                          |
@@ -390,7 +390,7 @@ sink {
       tmp_path = "/tmp/seatunnel"
       path="/seatunnel/text"
       fs.s3a.endpoint="s3.cn-north-1.amazonaws.com.cn"
-      fs.s3a.aws.credentials.provider="com.amazonaws.auth.InstanceProfileCredentialsProvider"
+      fs.s3a.aws.credentials.provider="software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider"
       file_format_type = "text"
       field_delimiter = "\t"
       row_delimiter = "\n"
@@ -413,7 +413,7 @@ sink {
 }
 ```
 
-对于文本文件格式，包含 `have_partition`、`custom_filename`、`sink_columns` 和 `com.amazonaws.auth.InstanceProfileCredentialsProvider`
+对于文本文件格式，包含 `have_partition`、`custom_filename`、`sink_columns` 和 `software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider`
 
 ```hocon
 S3File {
@@ -421,7 +421,7 @@ S3File {
   tmp_path = "/tmp/seatunnel"
   path="/seatunnel/text"
   fs.s3a.endpoint="s3.cn-north-1.amazonaws.com.cn"
-  fs.s3a.aws.credentials.provider="com.amazonaws.auth.InstanceProfileCredentialsProvider"
+  fs.s3a.aws.credentials.provider="software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider"
   file_format_type = "text"
   field_delimiter = "\t"
   row_delimiter = "\n"
@@ -552,7 +552,7 @@ S3File {
 }
 ```
 
-生产作业中不建议把长期有效的密钥直接写入任务文件。优先使用 IAM 类认证方式，例如 `fs.s3a.aws.credentials.provider = com.amazonaws.auth.InstanceProfileCredentialsProvider`，或通过 SeaTunnel 变量替换注入 `access_key` 和 `secret_key`。
+生产作业中不建议把长期有效的密钥直接写入任务文件。优先使用 IAM 类认证方式，例如 `fs.s3a.aws.credentials.provider = software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider`，或通过 SeaTunnel 变量替换注入 `access_key` 和 `secret_key`。
 
 ### 使用 STS AssumeRole 写入（跨账号写入）
 
@@ -576,21 +576,21 @@ sink {
 }
 ```
 
-对于 AWS SSO / Profile 角色，把 provider 类换成 `com.amazonaws.auth.profile.ProfileCredentialsProvider`，并把 `fs.s3a.profile`、`fs.s3a.credentialsFile` 等 provider 特定键放在 `hadoop_s3_properties` 里。完整的 `fs.s3a.*` 键集合参见 [Hadoop AWS](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html) 文档。
+对于 AWS SSO / Profile 角色，把 provider 类换成 `software.amazon.awssdk.auth.credentials.ProfileCredentialsProvider`，并把 `fs.s3a.profile`、`fs.s3a.credentialsFile` 等 provider 特定键放在 `hadoop_s3_properties` 里。完整的 `fs.s3a.*` 键集合参见 [Hadoop AWS](https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html) 文档。
 
 ## 容器环境中的凭据提供程序
 
-在容器环境（Kubernetes、ECS、EKS、Docker）中运行 SeaTunnel 时，S3File 连接器接受任何实现 `com.amazonaws.auth.AWSCredentialsProvider` 接口且在 classpath 上可用的全限定 S3A 凭据提供程序类。`fs.s3a.aws.credentials.provider` 选项在配置解析时进行验证（当类在构建配置的节点上可解析时）：类必须实现 AWS 凭据提供程序接口，且不能是抽象类。当类无法解析时（例如，提供程序 JAR 仅在 worker 节点上可用），验证将延迟到实际运行 S3A 的 worker 节点上的运行时进行。
+在容器环境（Kubernetes、ECS、EKS、Docker）中运行 SeaTunnel 时，S3File 连接器接受任何实现 `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` 接口且在 classpath 上可用的全限定 S3A 凭据提供程序类。`fs.s3a.aws.credentials.provider` 选项在配置解析时进行验证（当类在构建配置的节点上可解析时）：类必须实现 AWS 凭据提供程序接口，且不能是抽象类。当类无法解析时（例如，提供程序 JAR 仅在 worker 节点上可用），验证将延迟到实际运行 S3A 的 worker 节点上的运行时进行。
 
 ### 支持的凭据提供程序
 
 | 提供程序 | 类名 | 典型场景 |
 |----------|------|----------|
 | Simple AWSCredentials | `org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider` | 静态 access key / secret key |
-| Instance Profile | `com.amazonaws.auth.InstanceProfileCredentialsProvider` | EC2 实例角色（默认） |
-| Container | `com.amazonaws.auth.ContainerCredentialsProvider` | ECS 任务角色 |
-| Default Chain | `com.amazonaws.auth.DefaultAWSCredentialsProviderChain` | 多源回退链 |
-| 自定义 | 任何 `com.amazonaws.auth.AWSCredentialsProvider` 实现 | 用户自定义提供程序 |
+| Instance Profile | `software.amazon.awssdk.auth.credentials.InstanceProfileCredentialsProvider` | EC2 实例角色（默认） |
+| Container | `software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider` | ECS 任务角色 |
+| Default Chain | `software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider` | 多源回退链 |
+| 自定义 | 任何 `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider` 实现 | 用户自定义提供程序 |
 
 ### Kubernetes / EKS 配置
 
@@ -628,7 +628,7 @@ S3File {
   bucket = "s3a://my-bucket"
   tmp_path = "/tmp/seatunnel"
   fs.s3a.endpoint = "s3.amazonaws.com"
-  fs.s3a.aws.credentials.provider = "com.amazonaws.auth.DefaultAWSCredentialsProviderChain"
+  fs.s3a.aws.credentials.provider = "software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider"
   path = "/data/output"
   file_format_type = "parquet"
 }
@@ -643,7 +643,7 @@ S3File {
   bucket = "s3a://my-bucket"
   tmp_path = "/tmp/seatunnel"
   fs.s3a.endpoint = "s3.amazonaws.com"
-  fs.s3a.aws.credentials.provider = "com.amazonaws.auth.ContainerCredentialsProvider"
+  fs.s3a.aws.credentials.provider = "software.amazon.awssdk.auth.credentials.ContainerCredentialsProvider"
   path = "/data/output"
   file_format_type = "parquet"
 }
@@ -679,7 +679,7 @@ hadoop_s3_properties {
 - `InstanceProfileCredentialsProvider`：验证 EC2 实例已附加 IAM 角色。
 - `ContainerCredentialsProvider`：验证 `AWS_CONTAINER_CREDENTIALS_RELATIVE_URI` 环境变量已设置。
 
-**配置解析时的 `IllegalArgumentException`**：类名格式错误或类未实现 `com.amazonaws.auth.AWSCredentialsProvider`。请验证全限定类名是否正确，以及类是否实现了所需的接口。
+**配置解析时的 `IllegalArgumentException`**：类名格式错误或类未实现 `software.amazon.awssdk.auth.credentials.AwsCredentialsProvider`。请验证全限定类名是否正确，以及类是否实现了所需的接口。
 
 ## 变更日志
 

@@ -32,14 +32,13 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.ListObjectsV2Request;
-import com.amazonaws.services.s3.model.ListObjectsV2Result;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import software.amazon.awssdk.services.s3.model.S3Object;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -181,7 +180,7 @@ class S3SourceDryRunValidatorTest {
         assertEquals(
                 S3FileSourceOptions.SIMPLE_AWS_CREDENTIALS_PROVIDER,
                 configuration.get(Constants.AWS_CREDENTIALS_PROVIDER));
-        assertEquals(1200, configuration.getInt(Constants.SOCKET_TIMEOUT, -1));
+        assertEquals(1200, durationMillis(configuration, Constants.SOCKET_TIMEOUT));
         assertTrue(configuration.getBoolean(Constants.PATH_STYLE_ACCESS, false));
         assertEquals(2, properties.size());
         assertEquals("1200", properties.get(Constants.SOCKET_TIMEOUT));
@@ -201,35 +200,15 @@ class S3SourceDryRunValidatorTest {
         Configuration configuration =
                 S3AUtils.propagateBucketOptions(configuration(config), "warehouse");
 
-        assertEquals(5000, configuration.getInt(Constants.SOCKET_TIMEOUT, -1));
-        assertEquals(2000, configuration.getInt(Constants.ESTABLISH_TIMEOUT, -1));
+        assertEquals(5000, durationMillis(configuration, Constants.SOCKET_TIMEOUT));
+        assertEquals(2000, durationMillis(configuration, Constants.ESTABLISH_TIMEOUT));
         assertEquals(0, configuration.getInt(Constants.MAX_ERROR_RETRIES, -1));
-        assertEquals(0, configuration.getInt(Constants.RETRY_LIMIT, -1));
-        assertEquals(0, configuration.getInt(Constants.RETRY_THROTTLE_LIMIT, -1));
-        assertEquals("99", properties.get("fs.s3a.bucket.warehouse.retry.limit"));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"fs.s3a.multipart.purge", "fs.s3a.bucket.warehouse.multipart.purge"})
     void shouldRefuseMultipartPurgeBeforeOpeningFilesystem(String key) {
         assertConfigurationFailure(key, "true", "multipart purge");
-    }
-
-    @ParameterizedTest
-    @ValueSource(
-            strings = {"fs.s3a.metadatastore.impl", "fs.s3a.bucket.warehouse.metadatastore.impl"})
-    void shouldRefuseMetadataStoreInitialization(String key) {
-        assertConfigurationFailure(key, Constants.S3GUARD_METASTORE_DYNAMO, "S3Guard");
-    }
-
-    @ParameterizedTest
-    @ValueSource(
-            strings = {
-                "fs.s3a.s3.client.factory.impl",
-                "fs.s3a.bucket.warehouse.s3.client.factory.impl"
-            })
-    void shouldRefuseCustomClientInitialization(String key) {
-        assertConfigurationFailure(key, "example.CustomClientFactory", "custom S3 client factory");
     }
 
     @Test
@@ -239,17 +218,18 @@ class S3SourceDryRunValidatorTest {
 
     @Test
     void shouldCheckOnlyPathMetadata() throws IOException {
-        AmazonS3 client = mock(AmazonS3.class);
+        S3Client client = mock(S3Client.class);
         Path path = new Path("/events");
-        when(client.getObjectMetadata("warehouse", "events")).thenReturn(new ObjectMetadata());
+        when(client.headObject(any(HeadObjectRequest.class)))
+                .thenReturn(HeadObjectResponse.builder().build());
         S3SourceDryRunValidator.validatePath(client, "warehouse", path, FileDiscoveryMode.ONCE, 2);
-        verify(client).getObjectMetadata("warehouse", "events");
+        verify(client).headObject(any(HeadObjectRequest.class));
         verifyNoMoreInteractions(client);
     }
 
     @Test
     void shouldFailForMissingBatchPath() throws IOException {
-        AmazonS3 client = emptyPrefixClient();
+        S3Client client = emptyPrefixClient();
         Path path = new Path("/events");
         FileNotFoundException failure =
                 assertThrows(
@@ -262,7 +242,7 @@ class S3SourceDryRunValidatorTest {
 
     @Test
     void shouldAllowEmptyContinuousPrefix() throws IOException {
-        AmazonS3 client = emptyPrefixClient();
+        S3Client client = emptyPrefixClient();
         Path path = new Path("/events");
         assertDoesNotThrow(
                 () ->
@@ -272,13 +252,13 @@ class S3SourceDryRunValidatorTest {
 
     @Test
     void shouldPropagateDeniedAccessForContinuousDiscovery() throws IOException {
-        AmazonS3 client = emptyPrefixClient();
+        S3Client client = emptyPrefixClient();
         Path path = new Path("/events");
-        AmazonS3Exception denied = serviceFailure(403);
+        S3Exception denied = serviceFailure(403);
         when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenThrow(denied);
-        AmazonS3Exception failure =
+        S3Exception failure =
                 assertThrows(
-                        AmazonS3Exception.class,
+                        S3Exception.class,
                         () ->
                                 S3SourceDryRunValidator.validatePath(
                                         client,
@@ -292,12 +272,12 @@ class S3SourceDryRunValidatorTest {
 
     @Test
     void shouldFailForMissingBucketDuringContinuousDiscovery() {
-        AmazonS3 client = emptyPrefixClient();
-        AmazonS3Exception missing = serviceFailure(404);
+        S3Client client = emptyPrefixClient();
+        S3Exception missing = serviceFailure(404);
         when(client.listObjectsV2(any(ListObjectsV2Request.class))).thenThrow(missing);
-        AmazonS3Exception failure =
+        S3Exception failure =
                 assertThrows(
-                        AmazonS3Exception.class,
+                        S3Exception.class,
                         () ->
                                 S3SourceDryRunValidator.validatePath(
                                         client,
@@ -306,29 +286,29 @@ class S3SourceDryRunValidatorTest {
                                         FileDiscoveryMode.CONTINUOUS,
                                         2));
         assertSame(missing, failure);
-        assertEquals(404, failure.getStatusCode());
+        assertEquals(404, failure.statusCode());
     }
 
     @Test
     void shouldBoundPrefixListingWithoutFollowingContinuation() throws IOException {
-        AmazonS3 client = emptyPrefixClient();
+        S3Client client = emptyPrefixClient();
         when(client.listObjectsV2(any(ListObjectsV2Request.class)))
                 .thenAnswer(
                         invocation -> {
                             ListObjectsV2Request request = invocation.getArgument(0);
-                            assertEquals("warehouse", request.getBucketName());
-                            assertEquals("events/", request.getPrefix());
-                            assertEquals("/", request.getDelimiter());
-                            assertEquals(1, request.getMaxKeys());
-                            ListObjectsV2Result result = new ListObjectsV2Result();
-                            result.getObjectSummaries().add(new S3ObjectSummary());
-                            result.setTruncated(true);
-                            result.setNextContinuationToken("more-events");
-                            return result;
+                            assertEquals("warehouse", request.bucket());
+                            assertEquals("events/", request.prefix());
+                            assertEquals("/", request.delimiter());
+                            assertEquals(Integer.valueOf(1), request.maxKeys());
+                            return ListObjectsV2Response.builder()
+                                    .contents(S3Object.builder().build())
+                                    .isTruncated(true)
+                                    .nextContinuationToken("more-events")
+                                    .build();
                         });
         S3SourceDryRunValidator.validatePath(
                 client, "warehouse", new Path("/events"), FileDiscoveryMode.ONCE, 2);
-        verify(client).getObjectMetadata("warehouse", "events");
+        verify(client).headObject(any(HeadObjectRequest.class));
         verify(client).listObjectsV2(any(ListObjectsV2Request.class));
         verifyNoMoreInteractions(client);
     }
@@ -339,36 +319,26 @@ class S3SourceDryRunValidatorTest {
     }
 
     @Test
-    void shouldHonorLegacyListVersion() throws IOException {
-        AmazonS3 client = mock(AmazonS3.class);
-        when(client.getObjectMetadata("warehouse", "events")).thenThrow(serviceFailure(404));
-        when(client.listObjects(any(ListObjectsRequest.class)))
-                .thenAnswer(
-                        invocation -> {
-                            ListObjectsRequest request = invocation.getArgument(0);
-                            assertEquals(Integer.valueOf(1), request.getMaxKeys());
-                            assertEquals("events/", request.getPrefix());
-                            assertEquals("/", request.getDelimiter());
-                            return new ObjectListing();
-                        });
+    void shouldUseV2ListingForLegacyListVersion() throws IOException {
+        S3Client client = emptyPrefixClient();
         S3SourceDryRunValidator.validatePath(
                 client, "warehouse", new Path("/events"), FileDiscoveryMode.CONTINUOUS, 1);
-        verify(client).getObjectMetadata("warehouse", "events");
-        verify(client).listObjects(any(ListObjectsRequest.class));
+        verify(client).headObject(any(HeadObjectRequest.class));
+        verify(client).listObjectsV2(any(ListObjectsV2Request.class));
         verifyNoMoreInteractions(client);
     }
 
     @ParameterizedTest
     @ValueSource(ints = {0, 3})
     void shouldMatchS3AFallbackForOtherListVersions(int listVersion) throws IOException {
-        AmazonS3 client = emptyPrefixClient();
+        S3Client client = emptyPrefixClient();
         S3SourceDryRunValidator.validatePath(
                 client,
                 "warehouse",
                 new Path("/events"),
                 FileDiscoveryMode.CONTINUOUS,
                 listVersion);
-        verify(client).getObjectMetadata("warehouse", "events");
+        verify(client).headObject(any(HeadObjectRequest.class));
         verify(client).listObjectsV2(any(ListObjectsV2Request.class));
         verifyNoMoreInteractions(client);
     }
@@ -381,11 +351,11 @@ class S3SourceDryRunValidatorTest {
                 "credential.provider.path");
     }
 
-    private static AmazonS3 emptyPrefixClient() {
-        AmazonS3 client = mock(AmazonS3.class);
-        when(client.getObjectMetadata("warehouse", "events")).thenThrow(serviceFailure(404));
+    private static S3Client emptyPrefixClient() {
+        S3Client client = mock(S3Client.class);
+        when(client.headObject(any(HeadObjectRequest.class))).thenThrow(serviceFailure(404));
         when(client.listObjectsV2(any(ListObjectsV2Request.class)))
-                .thenReturn(new ListObjectsV2Result());
+                .thenReturn(ListObjectsV2Response.builder().build());
         return client;
     }
 
@@ -411,10 +381,9 @@ class S3SourceDryRunValidatorTest {
                 configuration.get(Constants.AWS_CREDENTIALS_PROVIDER));
     }
 
-    private static AmazonS3Exception serviceFailure(int status) {
-        AmazonS3Exception failure = new AmazonS3Exception("metadata failure");
-        failure.setStatusCode(status);
-        return failure;
+    private static S3Exception serviceFailure(int status) {
+        return (S3Exception)
+                S3Exception.builder().statusCode(status).message("metadata failure").build();
     }
 
     static Map<String, Object> sourceConfig() {
@@ -438,6 +407,11 @@ class S3SourceDryRunValidatorTest {
     private static TableSourceFactoryContext context(Map<String, Object> config) {
         return new TableSourceFactoryContext(
                 ReadonlyConfig.fromMap(config), S3SourceDryRunValidatorTest.class.getClassLoader());
+    }
+
+    private static long durationMillis(Configuration configuration, String key) {
+        return configuration.getTimeDuration(
+                key, "-1ms", java.util.concurrent.TimeUnit.MILLISECONDS);
     }
 
     private static Configuration configuration(Map<String, Object> config) {
