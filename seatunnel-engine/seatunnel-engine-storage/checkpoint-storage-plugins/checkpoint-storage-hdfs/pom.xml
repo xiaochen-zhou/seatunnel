@@ -31,10 +31,10 @@
     <name>SeaTunnel : Engine : Storage : Checkpoint Storage Plugins : HDFS</name>
 
     <properties>
-        <hadoop-aliyun.version>3.1.4</hadoop-aliyun.version>
+        <hadoop-aliyun.version>3.4.3</hadoop-aliyun.version>
         <hadoop-cos.version>3.4.1</hadoop-cos.version>
         <aws-java-sdk.version>1.11.271</aws-java-sdk.version>
-        <aliyun.sdk.oss.version>3.4.1</aliyun.sdk.oss.version>
+        <aliyun.sdk.oss.version>3.13.2</aliyun.sdk.oss.version>
     </properties>
 
     <dependencies>

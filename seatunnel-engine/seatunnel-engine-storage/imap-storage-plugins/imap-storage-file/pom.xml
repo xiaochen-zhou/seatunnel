@@ -32,8 +32,8 @@
 
     <properties>
         <!-- Imap storage dependency package  -->
-        <hadoop-aliyun.version>3.1.4</hadoop-aliyun.version>
-        <aliyun.sdk.oss.version>3.4.1</aliyun.sdk.oss.version>
+        <hadoop-aliyun.version>3.4.3</hadoop-aliyun.version>
+        <aliyun.sdk.oss.version>3.13.2</aliyun.sdk.oss.version>
         <json-smart.version>2.4.7</json-smart.version>
         <netty-buffer.version>4.1.60.Final</netty-buffer.version>
     </properties>
