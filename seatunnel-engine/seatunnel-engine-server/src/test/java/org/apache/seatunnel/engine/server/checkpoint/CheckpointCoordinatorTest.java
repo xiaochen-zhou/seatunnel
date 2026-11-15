@@ -1005,6 +1005,11 @@ public class CheckpointCoordinatorTest
      * mocked, so the test never touches Hazelcast / Hadoop I/O.
      */
     private CheckpointCoordinator buildMinimalCoordinator(ExecutorService executorService) {
+        return buildMinimalCoordinator(executorService, null);
+    }
+
+    private CheckpointCoordinator buildMinimalCoordinator(
+            ExecutorService executorService, CheckpointMonitorService monitorService) {
         CheckpointConfig checkpointConfig = new CheckpointConfig();
         checkpointConfig.setStorage(new CheckpointStorageConfig());
 
@@ -1033,7 +1038,7 @@ public class CheckpointCoordinatorTest
                 executorService,
                 mockIMap,
                 false,
-                null);
+                monitorService);
     }
 
     @Test
@@ -1220,6 +1225,63 @@ public class CheckpointCoordinatorTest
                     1,
                     pendingCounter.get(),
                     "pendingCounter must not be decremented when notifyCompleted fails");
+        } finally {
+            executorService.shutdownNow();
+        }
+    }
+
+    /**
+     * Regression: a checkpoint must not be reported as COMPLETED before {@code notifyCompleted()}
+     * succeeds. Otherwise a failed notify (e.g. the sink cannot commit) produces two history
+     * entries for the same checkpoint id: COMPLETED from here and FAILED from {@code
+     * cleanPendingCheckpoint}.
+     */
+    @Test
+    void testCompletedIsNotReportedWhenNotifyCompletedFails() {
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            CheckpointMonitorService monitorService = Mockito.mock(CheckpointMonitorService.class);
+            CheckpointCoordinator coordinator =
+                    buildMinimalCoordinator(executorService, monitorService);
+            CheckpointCoordinator spy = Mockito.spy(coordinator);
+
+            Mockito.doAnswer(invocation -> false).when(spy).notifyCompleted(Mockito.any());
+
+            long checkpointId = 1L;
+            CompletedCheckpoint completedCheckpoint =
+                    new CompletedCheckpoint(
+                            1L,
+                            1,
+                            checkpointId,
+                            System.currentTimeMillis(),
+                            CheckpointType.CHECKPOINT_TYPE,
+                            System.currentTimeMillis(),
+                            new HashMap<>(),
+                            new HashMap<>());
+
+            PendingCheckpoint pendingCheckpoint =
+                    new PendingCheckpoint(
+                            1L,
+                            1,
+                            checkpointId,
+                            System.currentTimeMillis(),
+                            CheckpointType.CHECKPOINT_TYPE,
+                            new HashSet<>(),
+                            new HashMap<>(),
+                            new HashMap<>());
+            @SuppressWarnings("unchecked")
+            ConcurrentHashMap<Long, PendingCheckpoint> pendingCheckpoints =
+                    (ConcurrentHashMap<Long, PendingCheckpoint>)
+                            ReflectionUtils.getField(spy, "pendingCheckpoints")
+                                    .orElseThrow(
+                                            () ->
+                                                    new IllegalStateException(
+                                                            "pendingCheckpoints field not found"));
+            pendingCheckpoints.put(checkpointId, pendingCheckpoint);
+
+            Assertions.assertDoesNotThrow(() -> spy.completePendingCheckpoint(completedCheckpoint));
+            Mockito.verify(monitorService, Mockito.never())
+                    .onCheckpointCompleted(Mockito.any(), Mockito.anyLong());
         } finally {
             executorService.shutdownNow();
         }

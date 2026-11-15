@@ -1446,16 +1446,20 @@ public class CheckpointCoordinator {
                 completedCheckpoint.getPipelineId(),
                 completedCheckpoint.getCheckpointId());
         latestCompletedCheckpoint = completedCheckpoint;
-        if (checkpointMonitorService != null) {
-            long stateSize = CheckpointMonitorService.calculateStateSize(completedCheckpoint);
-            checkpointMonitorService.onCheckpointCompleted(completedCheckpoint, stateSize);
-        }
+        // Do not report the checkpoint as completed before notifyCompleted() succeeds.
+        // If the notify phase fails (e.g. the sink cannot commit), the coordinator reports
+        // this pending checkpoint as FAILED; reporting it as COMPLETED here as well produced
+        // two history entries (one COMPLETED and one FAILED) for the same checkpoint id.
         if (!notifyCompleted(completedCheckpoint)) {
             return;
         }
         PendingCheckpoint pendingCheckpoint = pendingCheckpoints.remove(checkpointId);
         if (pendingCheckpoint != null) {
             pendingCheckpoint.abortCheckpointTimeoutFutureWhenIsCompleted();
+        }
+        if (checkpointMonitorService != null) {
+            long stateSize = CheckpointMonitorService.calculateStateSize(completedCheckpoint);
+            checkpointMonitorService.onCheckpointCompleted(completedCheckpoint, stateSize);
         }
         pendingCounter.decrementAndGet();
 
