@@ -620,6 +620,21 @@ public class PhysicalVertex {
         log.info(String.format("%s state process is stopped", taskFullName));
     }
 
+    private static final int MAX_SLOT_REALLOCATE_TIMES = 3;
+
+    /**
+     * A worker rejects a deploy when the slot was released on its side, typically after a cluster
+     * restart, while the master still holds the old assignment. In that case the job should not
+     * fail immediately: a fresh slot is requested and the deploy is retried.
+     */
+    @VisibleForTesting
+    static boolean isUnknownSlotFailure(TaskDeployState deployState) {
+        String message = deployState.getThrowableMsg();
+        return message != null
+                && (message.contains("Unknown slot in slot service")
+                        || message.contains("WrongTargetSlotException"));
+    }
+
     public synchronized void stateProcess() {
         if (!isRunning) {
             log.warn(String.format("%s state process is not start", taskFullName));
@@ -631,8 +646,25 @@ public class PhysicalVertex {
             case RUNNING:
                 break;
             case DEPLOYING:
-                TaskDeployState deployState =
-                        deploy(jobMaster.getOwnedSlotProfiles(taskGroupLocation));
+                SlotProfile slotProfile = jobMaster.getOwnedSlotProfiles(taskGroupLocation);
+                TaskDeployState deployState = deploy(slotProfile);
+                int reallocateTimes = 0;
+                while (!deployState.isSuccess()
+                        && isUnknownSlotFailure(deployState)
+                        && reallocateTimes < MAX_SLOT_REALLOCATE_TIMES
+                        && isRunning) {
+                    reallocateTimes++;
+                    log.warn(
+                            String.format(
+                                    "%s deploy failed because slot %s is not active on worker, re-allocate slot (attempt %d)",
+                                    taskFullName, slotProfile, reallocateTimes));
+                    SlotProfile reallocatedSlotProfile = jobMaster.reallocateSlotForTaskGroup(this);
+                    if (reallocatedSlotProfile == null) {
+                        break;
+                    }
+                    slotProfile = reallocatedSlotProfile;
+                    deployState = deploy(slotProfile);
+                }
                 if (!deployState.isSuccess()) {
                     makeTaskGroupFailing(
                             new TaskGroupDeployException(deployState.getThrowableMsg()));

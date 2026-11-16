@@ -69,6 +69,7 @@ import org.apache.seatunnel.engine.server.checkpoint.CheckpointManager;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointPlan;
 import org.apache.seatunnel.engine.server.dag.DAGUtils;
 import org.apache.seatunnel.engine.server.dag.physical.PhysicalPlan;
+import org.apache.seatunnel.engine.server.dag.physical.PhysicalVertex;
 import org.apache.seatunnel.engine.server.dag.physical.PipelineLocation;
 import org.apache.seatunnel.engine.server.dag.physical.PlanUtils;
 import org.apache.seatunnel.engine.server.dag.physical.ResourceUtils;
@@ -1572,6 +1573,44 @@ public class JobMaster {
         private boolean isAnyPipelineSuspended() {
             return anyPipelineSuspended;
         }
+    }
+
+    /**
+     * Re-allocates a slot for a task group whose previous slot was rejected by the worker, e.g. the
+     * worker released the slot while the job was restoring after a cluster restart, and persists
+     * the new assignment so that the next deploy attempt uses it.
+     */
+    public SlotProfile reallocateSlotForTaskGroup(@NonNull PhysicalVertex task) {
+        TaskGroupLocation taskGroupLocation = task.getTaskGroupLocation();
+        CompletableFuture<SlotProfile> future =
+                ResourceUtils.applyResourceForTask(resourceManager, task, Collections.emptyMap());
+        if (future == null) {
+            return null;
+        }
+        SlotProfile slotProfile;
+        try {
+            slotProfile = future.join();
+        } catch (Exception e) {
+            LOGGER.warning(
+                    String.format(
+                            "Re-allocate slot for task group %s failed: %s",
+                            taskGroupLocation, ExceptionUtils.getMessage(e)));
+            return null;
+        }
+        if (slotProfile == null) {
+            return null;
+        }
+        PipelineLocation pipelineLocation = taskGroupLocation.getPipelineLocation();
+        Map<TaskGroupLocation, SlotProfile> current = ownedSlotProfilesIMap.get(pipelineLocation);
+        Map<TaskGroupLocation, SlotProfile> updated =
+                current == null ? new HashMap<>() : new HashMap<>(current);
+        updated.put(taskGroupLocation, slotProfile);
+        setOwnedSlotProfiles(pipelineLocation, updated);
+        LOGGER.info(
+                String.format(
+                        "Re-allocated slot for task group %s: worker=%s, slotID=%d",
+                        taskGroupLocation, slotProfile.getWorker(), slotProfile.getSlotID()));
+        return slotProfile;
     }
 
     public void setOwnedSlotProfiles(
