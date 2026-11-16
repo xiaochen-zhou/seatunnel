@@ -496,4 +496,40 @@ public class DynamicChunkSplitterTest {
         }
         return JdbcSourceConfig.of(ReadonlyConfig.fromMap(options));
     }
+
+    @Test
+    public void testFirstSplitCoversNullSplitKey() {
+        JdbcSourceConfig config =
+                JdbcSourceConfig.builder()
+                        .jdbcConnectionConfig(
+                                JdbcConnectionConfig.builder()
+                                        .url("jdbc:postgresql://localhost:5432/test")
+                                        .driverName("org.postgresql.Driver")
+                                        .build())
+                        .build();
+        TableSchema tableSchema =
+                TableSchema.builder()
+                        .columns(
+                                Arrays.asList(
+                                        PhysicalColumn.builder()
+                                                .name("id")
+                                                .sourceType("int4")
+                                                .dataType(BasicType.INT_TYPE)
+                                                .build()))
+                        .build();
+        DynamicChunkSplitter splitter = new DynamicChunkSplitter(config);
+        JdbcSourceSplit firstSplit =
+                new JdbcSourceSplit(
+                        TablePath.of("db1", "schema1", "table1"),
+                        "split-first",
+                        null,
+                        "id",
+                        BasicType.INT_TYPE,
+                        null,
+                        10);
+        String sql = splitter.createDynamicSplitQuerySQL(firstSplit, tableSchema);
+        Assertions.assertTrue(
+                sql.contains("OR \"id\" IS NULL"),
+                "first split must include NULL split-key rows: " + sql);
+    }
 }
