@@ -956,10 +956,15 @@ public class DynamicChunkSplitter extends ChunkSplitter {
             condition = null;
         } else if (isFirstSplit) {
             StringBuilder sql = new StringBuilder();
+            sql.append("(");
             addKeyColumnsToCondition(schema, rowType, sql, " <= ?");
             sql.append(" AND NOT (");
             addKeyColumnsToCondition(schema, rowType, sql, " = ?");
-            sql.append(")");
+            sql.append("))");
+            // 分片键为 NULL 的行不满足任何比较谓词，会落在所有分片区间之外；
+            // 统一并入首个分片，避免静默漏数（不增加占位符，执行计划不变）。
+            sql.append(" OR ");
+            addKeyColumnsIsNullToCondition(sql, rowType);
             condition = sql.toString();
         } else if (isLastSplit) {
             StringBuilder sql = new StringBuilder();
@@ -1016,6 +1021,15 @@ public class DynamicChunkSplitter extends ChunkSplitter {
             sql.append(fieldName).append(predicate);
             if (i < rowType.getTotalFields() - 1) {
                 sql.append(" AND ");
+            }
+        }
+    }
+
+    private void addKeyColumnsIsNullToCondition(StringBuilder sql, SeaTunnelRowType rowType) {
+        for (int i = 0; i < rowType.getTotalFields(); i++) {
+            sql.append(jdbcDialect.quoteIdentifier(rowType.getFieldName(i))).append(" IS NULL");
+            if (i < rowType.getTotalFields() - 1) {
+                sql.append(" OR ");
             }
         }
     }
