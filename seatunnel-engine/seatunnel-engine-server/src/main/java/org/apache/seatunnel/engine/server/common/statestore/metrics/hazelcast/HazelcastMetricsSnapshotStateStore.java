@@ -30,12 +30,18 @@ import com.hazelcast.map.listener.EntryAddedListener;
 import com.hazelcast.map.listener.EntryRemovedListener;
 import com.hazelcast.map.listener.EntryUpdatedListener;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -58,11 +64,23 @@ public class HazelcastMetricsSnapshotStateStore
     private final AtomicBoolean statsInitializing = new AtomicBoolean(false);
     private volatile UUID metricsListenerId;
 
+    /**
+     * Bounded executor used to merge partitions in parallel when {@code partitionCount > 1}.
+     * <p>
+     * The merge of a partition performs a blocking distributed {@code IMap.compute}; running
+     * that on the common ForkJoinPool makes the pool spawn compensation threads until the JVM
+     * thread limit is hit and Hazelcast operation threads (heartbeats etc.) are starved.
+     * A fixed-size pool keeps the number of threads that can block bounded, no matter how many
+     * partitions a snapshot contains.
+     */
+    private final ExecutorService mergeExecutor;
+
     public HazelcastMetricsSnapshotStateStore(
             IMap<Long, Map<TaskLocation, SeaTunnelMetricsContext>> metricsImap,
             int partitionCount) {
         this.metricsImap = metricsImap;
         this.partitionCount = partitionCount;
+        this.mergeExecutor = createMergeExecutor(partitionCount);
         initStats();
     }
 
@@ -79,11 +97,15 @@ public class HazelcastMetricsSnapshotStateStore
                     partitioned.computeIfAbsent(partition, k -> new HashMap<>()).put(key, value);
                 });
 
-        // Merge sequentially on the calling operation thread: updatePartition() blocks on a
-        // distributed IMap compute, and running it from parallelStream() makes the common
-        // ForkJoinPool spawn compensation threads until the JVM hits its thread limit
-        // ("Thread limit exceeded replacing blocked worker"), which starves Hazelcast
-        // operation threads such as heartbeats and causes new jobs to stay unregistered.
+        if (mergeExecutor != null && partitioned.size() > 1) {
+            mergeInParallel(partitioned);
+            return;
+        }
+
+        // Merge on the calling operation thread. updatePartition() blocks on a distributed
+        // IMap compute; running it from parallelStream() makes the common ForkJoinPool spawn
+        // compensation threads until the JVM thread limit is hit ("Thread limit exceeded
+        // replacing blocked worker"), starving Hazelcast operation threads such as heartbeats.
         for (Map.Entry<Long, Map<TaskLocation, SeaTunnelMetricsContext>> entry :
                 partitioned.entrySet()) {
             updatePartition(
@@ -94,6 +116,56 @@ public class HazelcastMetricsSnapshotStateStore
                         return current;
                     });
         }
+    }
+
+    /** Maximum number of threads used for one parallel merge, regardless of partition count. */
+    private static final int MAX_MERGE_PARALLELISM = 4;
+
+    private void mergeInParallel(
+            Map<Long, Map<TaskLocation, SeaTunnelMetricsContext>> partitioned) {
+        List<Future<?>> futures = new ArrayList<>(partitioned.size());
+        for (Map.Entry<Long, Map<TaskLocation, SeaTunnelMetricsContext>> entry :
+                partitioned.entrySet()) {
+            futures.add(
+                    mergeExecutor.submit(
+                            () ->
+                                    updatePartition(
+                                            entry.getKey(),
+                                            current -> {
+                                                if (current == null) current = new HashMap<>();
+                                                current.putAll(entry.getValue());
+                                                return current;
+                                            })));
+        }
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new SeaTunnelEngineException("Interrupted while merging metrics snapshot", e);
+            } catch (ExecutionException e) {
+                throw new SeaTunnelEngineException(
+                        "Failed to merge metrics snapshot", e.getCause());
+            }
+        }
+    }
+
+    private static ExecutorService createMergeExecutor(int partitionCount) {
+        int parallelism = Math.min(Math.max(partitionCount, 1), MAX_MERGE_PARALLELISM);
+        if (parallelism <= 1) {
+            return null;
+        }
+        AtomicInteger threadIndex = new AtomicInteger();
+        return Executors.newFixedThreadPool(
+                parallelism,
+                runnable -> {
+                    Thread thread =
+                            new Thread(
+                                    runnable,
+                                    "seatunnel-metrics-merge-" + threadIndex.incrementAndGet());
+                    thread.setDaemon(true);
+                    return thread;
+                });
     }
 
     @Override
