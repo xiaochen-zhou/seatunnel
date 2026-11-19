@@ -79,19 +79,21 @@ public class HazelcastMetricsSnapshotStateStore
                     partitioned.computeIfAbsent(partition, k -> new HashMap<>()).put(key, value);
                 });
 
-        partitioned
-                .entrySet()
-                .parallelStream()
-                .forEach(
-                        entry -> {
-                            updatePartition(
-                                    entry.getKey(),
-                                    current -> {
-                                        if (current == null) current = new HashMap<>();
-                                        current.putAll(entry.getValue());
-                                        return current;
-                                    });
-                        });
+        // Merge sequentially on the calling operation thread: updatePartition() blocks on a
+        // distributed IMap compute, and running it from parallelStream() makes the common
+        // ForkJoinPool spawn compensation threads until the JVM hits its thread limit
+        // ("Thread limit exceeded replacing blocked worker"), which starves Hazelcast
+        // operation threads such as heartbeats and causes new jobs to stay unregistered.
+        for (Map.Entry<Long, Map<TaskLocation, SeaTunnelMetricsContext>> entry :
+                partitioned.entrySet()) {
+            updatePartition(
+                    entry.getKey(),
+                    current -> {
+                        if (current == null) current = new HashMap<>();
+                        current.putAll(entry.getValue());
+                        return current;
+                    });
+        }
     }
 
     @Override
