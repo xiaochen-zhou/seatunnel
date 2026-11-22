@@ -647,7 +647,19 @@ public class PhysicalVertex {
                 break;
             case DEPLOYING:
                 SlotProfile slotProfile = jobMaster.getOwnedSlotProfiles(taskGroupLocation);
-                TaskDeployState deployState = deploy(slotProfile);
+                TaskDeployState deployState;
+                if (slotProfile == null) {
+                    // No persisted slot for this task group (for example the IMap entry was lost
+                    // during a failover). Treat it as an unknown slot so that the re-allocation
+                    // below is triggered instead of calling deploy(null).
+                    deployState =
+                            TaskDeployState.failed(
+                                    new IllegalStateException(
+                                            "Unknown slot in slot service: no owned slot profile for task group "
+                                                    + taskGroupLocation));
+                } else {
+                    deployState = deploy(slotProfile);
+                }
                 int reallocateTimes = 0;
                 while (!deployState.isSuccess()
                         && isUnknownSlotFailure(deployState)
@@ -666,9 +678,19 @@ public class PhysicalVertex {
                     deployState = deploy(slotProfile);
                 }
                 if (!deployState.isSuccess()) {
-                    makeTaskGroupFailing(
-                            new TaskGroupDeployException(deployState.getThrowableMsg()));
-                } else {
+                    // The last slot we obtained is not used by any running task: release it before
+                    // failing, otherwise the assignment leaks until the job is cleaned up.
+                    if (slotProfile != null) {
+                        jobMaster.releaseSlotQuietly(taskGroupLocation, slotProfile);
+                    }
+                    // Do not overwrite a concurrent cancel/finish state transition.
+                    if (isRunning) {
+                        makeTaskGroupFailing(
+                                new TaskGroupDeployException(deployState.getThrowableMsg()));
+                    }
+                } else if (ExecutionState.DEPLOYING.equals(getExecutionState())) {
+                    // A concurrent cancel may have moved the vertex to CANCELING while the deploy
+                    // was in flight; promoting to RUNNING here would resurrect it.
                     updateTaskState(ExecutionState.RUNNING);
                 }
                 break;
