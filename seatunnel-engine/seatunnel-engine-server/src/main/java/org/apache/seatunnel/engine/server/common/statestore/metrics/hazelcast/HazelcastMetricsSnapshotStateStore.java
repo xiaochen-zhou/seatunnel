@@ -42,6 +42,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -119,7 +121,10 @@ public class HazelcastMetricsSnapshotStateStore
     }
 
     /** Maximum number of threads used for one parallel merge, regardless of partition count. */
-    private static final int MAX_MERGE_PARALLELISM = 4;
+    private static final int MAX_MERGE_PARALLELISM = 32;
+
+    /** A single partition must not block the reporting operation thread forever. */
+    private static final long MERGE_TIMEOUT_SECONDS = 30L;
 
     private void mergeInParallel(
             Map<Long, Map<TaskLocation, SeaTunnelMetricsContext>> partitioned) {
@@ -137,16 +142,28 @@ public class HazelcastMetricsSnapshotStateStore
                                                 return current;
                                             })));
         }
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new SeaTunnelEngineException("Interrupted while merging metrics snapshot", e);
-            } catch (ExecutionException e) {
-                throw new SeaTunnelEngineException(
-                        "Failed to merge metrics snapshot", e.getCause());
+        try {
+            for (Future<?> future : futures) {
+                future.get(MERGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            cancelAll(futures);
+            throw new SeaTunnelEngineException("Interrupted while merging metrics snapshot", e);
+        } catch (ExecutionException e) {
+            cancelAll(futures);
+            throw new SeaTunnelEngineException("Failed to merge metrics snapshot", e.getCause());
+        } catch (TimeoutException e) {
+            cancelAll(futures);
+            throw new SeaTunnelEngineException(
+                    "Timed out after " + MERGE_TIMEOUT_SECONDS + "s while merging metrics snapshot",
+                    e);
+        }
+    }
+
+    private static void cancelAll(List<Future<?>> futures) {
+        for (Future<?> future : futures) {
+            future.cancel(true);
         }
     }
 
@@ -286,6 +303,14 @@ public class HazelcastMetricsSnapshotStateStore
     @Override
     public void close() {
         removeMetricsListener();
+        if (mergeExecutor != null) {
+            mergeExecutor.shutdownNow();
+            try {
+                mergeExecutor.awaitTermination(MERGE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     private void initStats() {
