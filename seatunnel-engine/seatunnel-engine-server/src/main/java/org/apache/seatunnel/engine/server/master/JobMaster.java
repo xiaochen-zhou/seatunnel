@@ -69,6 +69,7 @@ import org.apache.seatunnel.engine.server.checkpoint.CheckpointManager;
 import org.apache.seatunnel.engine.server.checkpoint.CheckpointPlan;
 import org.apache.seatunnel.engine.server.dag.DAGUtils;
 import org.apache.seatunnel.engine.server.dag.physical.PhysicalPlan;
+import org.apache.seatunnel.engine.server.dag.physical.PhysicalVertex;
 import org.apache.seatunnel.engine.server.dag.physical.PipelineLocation;
 import org.apache.seatunnel.engine.server.dag.physical.PlanUtils;
 import org.apache.seatunnel.engine.server.dag.physical.ResourceUtils;
@@ -116,6 +117,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
@@ -124,6 +126,8 @@ import static org.apache.seatunnel.api.common.SeaTunnelAPIErrorCode.HANDLE_SAVE_
 import static org.apache.seatunnel.common.constants.JobMode.BATCH;
 
 public class JobMaster {
+
+    private static final long REALLOCATE_SLOT_TIMEOUT_SECONDS = 60L;
     private static final ILogger LOGGER = Logger.getLogger(JobMaster.class);
 
     private final Object metricsLock = new Object();
@@ -1581,6 +1585,140 @@ public class JobMaster {
 
         private boolean isAnyPipelineSuspended() {
             return anyPipelineSuspended;
+        }
+    }
+
+    /**
+     * Re-allocates a slot for a task group whose previous slot was rejected by the worker, e.g. the
+     * worker released the slot while the job was restoring after a cluster restart, and persists
+     * the new assignment so that the next deploy attempt uses it.
+     */
+    public SlotProfile reallocateSlotForTaskGroup(@NonNull PhysicalVertex task) {
+        TaskGroupLocation taskGroupLocation = task.getTaskGroupLocation();
+        SlotProfile oldSlotProfile = getOwnedSlotProfiles(taskGroupLocation);
+        // Keep the same tag constraints as the normal pre-apply path, otherwise a re-allocated
+        // slot may land on a worker that the job explicitly excluded.
+        Map<String, String> tags = getPipelineTags(taskGroupLocation);
+        CompletableFuture<SlotProfile> future =
+                ResourceUtils.applyResourceForTask(resourceManager, task, tags);
+        if (future == null) {
+            return null;
+        }
+        // The resource manager may complete the request after the caller gave up (timeout or
+        // cancellation). Claim the result exactly once: whoever wins uses the slot, the loser
+        // releases it, otherwise a late allocation would leak until the job is cleaned up.
+        java.util.concurrent.atomic.AtomicBoolean claimed =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        future.whenComplete(
+                (lateSlot, error) -> {
+                    if (lateSlot != null && claimed.compareAndSet(false, true)) {
+                        LOGGER.warning(
+                                String.format(
+                                        "Re-allocated slot %s for task group %s arrived after the"
+                                                + " request was abandoned, releasing it",
+                                        lateSlot, taskGroupLocation));
+                        releaseSlotQuietly(taskGroupLocation, lateSlot);
+                    }
+                });
+        SlotProfile slotProfile;
+        try {
+            slotProfile = future.get(REALLOCATE_SLOT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            LOGGER.warning(
+                    String.format(
+                            "Re-allocate slot for task group %s failed: %s",
+                            taskGroupLocation, ExceptionUtils.getMessage(e)));
+            future.cancel(true);
+            return null;
+        }
+        if (slotProfile == null || !claimed.compareAndSet(false, true)) {
+            return null;
+        }
+        try {
+            // Update the persisted mapping atomically: several task groups of one pipeline can be
+            // re-allocated concurrently, a read-copy-write here would drop each other's slots.
+            ownedSlotProfilesIMap.compute(
+                    taskGroupLocation.getPipelineLocation(),
+                    (pipelineLocation, current) -> {
+                        Map<TaskGroupLocation, SlotProfile> updated =
+                                current == null ? new HashMap<>() : new HashMap<>(current);
+                        updated.put(taskGroupLocation, slotProfile);
+                        return updated;
+                    });
+        } catch (Exception e) {
+            LOGGER.warning(
+                    String.format(
+                            "Persist re-allocated slot for task group %s failed: %s, release it",
+                            taskGroupLocation, ExceptionUtils.getMessage(e)));
+            releaseSlotQuietly(taskGroupLocation, slotProfile);
+            return null;
+        }
+        if (oldSlotProfile != null && !oldSlotProfile.equals(slotProfile)) {
+            // The old slot may still be alive on the worker (e.g. after a master failover);
+            // without releasing it the worker keeps the slot assigned forever. The master-side
+            // slotActiveCheck only sees its own registration and can be stale after a failover,
+            // so attempt the release instead of trusting it.
+            try {
+                if (!resourceManager.slotActiveCheck(oldSlotProfile)) {
+                    LOGGER.warning(
+                            String.format(
+                                    "Old slot %s of task group %s is no longer active on the"
+                                            + " master, releasing it anyway",
+                                    oldSlotProfile, taskGroupLocation));
+                }
+            } catch (Exception e) {
+                LOGGER.warning(
+                        String.format(
+                                "Check old slot %s of task group %s failed: %s",
+                                oldSlotProfile, taskGroupLocation, ExceptionUtils.getMessage(e)));
+            }
+            releaseSlotQuietly(taskGroupLocation, oldSlotProfile);
+        }
+        LOGGER.info(
+                String.format(
+                        "Re-allocated slot for task group %s: worker=%s, slotID=%d",
+                        taskGroupLocation, slotProfile.getWorker(), slotProfile.getSlotID()));
+        return slotProfile;
+    }
+
+    private Map<String, String> getPipelineTags(TaskGroupLocation taskGroupLocation) {
+        if (physicalPlan == null) {
+            return Collections.emptyMap();
+        }
+        PipelineLocation pipelineLocation = taskGroupLocation.getPipelineLocation();
+        for (SubPlan subPlan : physicalPlan.getPipelineList()) {
+            if (pipelineLocation.equals(subPlan.getPipelineLocation())) {
+                return subPlan.getTags() == null ? Collections.emptyMap() : subPlan.getTags();
+            }
+        }
+        return Collections.emptyMap();
+    }
+
+    /**
+     * Releases a slot without letting a slow or unavailable worker block the state machine. The
+     * release is best-effort: a timeout only means the assignment may survive until the job ends.
+     */
+    public void releaseSlotQuietly(
+            @NonNull TaskGroupLocation taskGroupLocation, @NonNull SlotProfile slotProfile) {
+        try {
+            resourceManager
+                    .releaseResources(
+                            taskGroupLocation.getJobId(), Collections.singletonList(slotProfile))
+                    .get(REALLOCATE_SLOT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            LOGGER.warning(
+                    String.format(
+                            "Release slot %s of task group %s interrupted",
+                            slotProfile, taskGroupLocation));
+        } catch (Exception e) {
+            LOGGER.warning(
+                    String.format(
+                            "Release slot %s of task group %s failed: %s",
+                            slotProfile, taskGroupLocation, ExceptionUtils.getMessage(e)));
         }
     }
 

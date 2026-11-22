@@ -620,6 +620,21 @@ public class PhysicalVertex {
         log.info(String.format("%s state process is stopped", taskFullName));
     }
 
+    private static final int MAX_SLOT_REALLOCATE_TIMES = 3;
+
+    /**
+     * A worker rejects a deploy when the slot was released on its side, typically after a cluster
+     * restart, while the master still holds the old assignment. In that case the job should not
+     * fail immediately: a fresh slot is requested and the deploy is retried.
+     */
+    @VisibleForTesting
+    static boolean isUnknownSlotFailure(TaskDeployState deployState) {
+        String message = deployState.getThrowableMsg();
+        return message != null
+                && (message.contains("Unknown slot in slot service")
+                        || message.contains("WrongTargetSlotException"));
+    }
+
     public synchronized void stateProcess() {
         if (!isRunning) {
             log.warn(String.format("%s state process is not start", taskFullName));
@@ -631,12 +646,51 @@ public class PhysicalVertex {
             case RUNNING:
                 break;
             case DEPLOYING:
-                TaskDeployState deployState =
-                        deploy(jobMaster.getOwnedSlotProfiles(taskGroupLocation));
-                if (!deployState.isSuccess()) {
-                    makeTaskGroupFailing(
-                            new TaskGroupDeployException(deployState.getThrowableMsg()));
+                SlotProfile slotProfile = jobMaster.getOwnedSlotProfiles(taskGroupLocation);
+                TaskDeployState deployState;
+                if (slotProfile == null) {
+                    // No persisted slot for this task group (for example the IMap entry was lost
+                    // during a failover). Treat it as an unknown slot so that the re-allocation
+                    // below is triggered instead of calling deploy(null).
+                    deployState =
+                            TaskDeployState.failed(
+                                    new IllegalStateException(
+                                            "Unknown slot in slot service: no owned slot profile for task group "
+                                                    + taskGroupLocation));
                 } else {
+                    deployState = deploy(slotProfile);
+                }
+                int reallocateTimes = 0;
+                while (!deployState.isSuccess()
+                        && isUnknownSlotFailure(deployState)
+                        && reallocateTimes < MAX_SLOT_REALLOCATE_TIMES
+                        && isRunning) {
+                    reallocateTimes++;
+                    log.warn(
+                            String.format(
+                                    "%s deploy failed because slot %s is not active on worker, re-allocate slot (attempt %d)",
+                                    taskFullName, slotProfile, reallocateTimes));
+                    SlotProfile reallocatedSlotProfile = jobMaster.reallocateSlotForTaskGroup(this);
+                    if (reallocatedSlotProfile == null) {
+                        break;
+                    }
+                    slotProfile = reallocatedSlotProfile;
+                    deployState = deploy(slotProfile);
+                }
+                if (!deployState.isSuccess()) {
+                    // The last slot we obtained is not used by any running task: release it before
+                    // failing, otherwise the assignment leaks until the job is cleaned up.
+                    if (slotProfile != null) {
+                        jobMaster.releaseSlotQuietly(taskGroupLocation, slotProfile);
+                    }
+                    // Do not overwrite a concurrent cancel/finish state transition.
+                    if (isRunning) {
+                        makeTaskGroupFailing(
+                                new TaskGroupDeployException(deployState.getThrowableMsg()));
+                    }
+                } else if (ExecutionState.DEPLOYING.equals(getExecutionState())) {
+                    // A concurrent cancel may have moved the vertex to CANCELING while the deploy
+                    // was in flight; promoting to RUNNING here would resurrect it.
                     updateTaskState(ExecutionState.RUNNING);
                 }
                 break;
